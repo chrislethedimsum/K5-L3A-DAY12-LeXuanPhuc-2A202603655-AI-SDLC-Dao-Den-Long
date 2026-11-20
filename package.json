@@ -1,0 +1,25 @@
+{
+  "name": "dao-den-long",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build && npm run build:headless",
+    "preview": "vite preview --host 0.0.0.0",
+    "build:headless": "tsc -p tsconfig.headless.json",
+    "headless": "node dist-headless/src/headless/cli.js",
+    "test": "npm run build:headless && vitest run",
+    "verify": "npm test && npm run build"
+  },
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/three": "^0.170.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.0",
+    "vitest": "^2.1.8"
+  }
+}

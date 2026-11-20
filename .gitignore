@@ -1,0 +1,7 @@
+node_modules/
+dist/
+dist-headless/
+coverage/
+*.tsbuildinfo
+.DS_Store
+*.local

@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "noEmit": false,
+    "outDir": "dist-headless",
+    "rootDir": ".",
+    "lib": [
+      "ES2022"
+    ],
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "src/core/**/*.ts",
+    "src/headless/**/*.ts",
+    "game.contract.json"
+  ]
+}
