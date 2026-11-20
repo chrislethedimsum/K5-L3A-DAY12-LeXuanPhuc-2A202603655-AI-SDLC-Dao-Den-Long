@@ -5,7 +5,6 @@ import type { GameEvent, HudState, Pos3, Snapshot } from '../core/types';
 
 const T = contract.tuning;
 
-// Standard Ticket-02 HEX Palette
 const PALETTE = {
   sky: '#0E1430',
   fog: '#1B2350',
@@ -20,10 +19,12 @@ const PALETTE = {
   moteHalo: '#FFE58A',
   shadeBody: '#120A1A',
   shadeRim: '#7A3CFF',
+  shadeRimColorblind: '#00B3FF',
   shadeStunned: '#3A3450',
   mayRobe: '#E8E2D0',
   mayScarfAndCharm: '#C8102E',
   gold: '#F2C14E',
+  danger: '#FF5A5F',
   drifter: '#8FA3B8'
 };
 
@@ -47,6 +48,7 @@ export class IslandScene {
   private ambient = new THREE.HemisphereLight(0xf5f1e6, 0x1b2350, 0.15);
   private moon = new THREE.DirectionalLight(0xf5f1e6, 1.35);
   private builtNight: NightNumber | null = null;
+  private colorblind = false;
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -61,7 +63,6 @@ export class IslandScene {
     this.moon.position.set(-22, 46, -18);
     this.scene.add(this.moon);
 
-    // Sea of clouds & stars
     const sea = new THREE.Mesh(
       new THREE.CircleGeometry(240, 48),
       new THREE.MeshStandardMaterial({ color: PALETTE.cloudSea, roughness: 0.95 })
@@ -95,7 +96,6 @@ export class IslandScene {
 
     this.scene.add(this.terrainGroup);
 
-    // Mây: robe #E8E2D0, red scarf #C8102E, nón lá, small lantern
     this.mesh(new THREE.CylinderGeometry(0.36, 0.54, 1.05, 10), PALETTE.mayRobe, this.player, 0, 0.85, 0);
     this.mesh(new THREE.TorusGeometry(0.34, 0.08, 6, 16), PALETTE.mayScarfAndCharm, this.player, 0, 1.32, 0).rotation.x =
       Math.PI / 2;
@@ -109,7 +109,6 @@ export class IslandScene {
     this.player.add(lamp);
     this.scene.add(this.player);
 
-    // Wind-warning leaf particles
     const leafGeo = new THREE.BoxGeometry(0.32, 0.05, 0.18);
     const leafMat = new THREE.MeshBasicMaterial({ color: PALETTE.gold });
     for (let i = 0; i < 18; i++) {
@@ -121,6 +120,25 @@ export class IslandScene {
 
     this.resize();
     window.addEventListener('resize', () => this.resize());
+  }
+
+  setColorblind(enabled: boolean): void {
+    this.colorblind = enabled;
+    const accent = enabled ? PALETTE.shadeRimColorblind : PALETTE.shadeRim;
+    for (const [key, g] of this.entities) {
+      if (key.startsWith('shade:')) {
+        const rim = g.getObjectByName('rim') as THREE.Mesh | undefined;
+        if (rim) (rim.material as THREE.MeshBasicMaterial).color.set(accent);
+        for (const eyeName of ['eyeL', 'eyeR']) {
+          const eye = g.getObjectByName(eyeName) as THREE.Mesh | undefined;
+          if (eye) {
+            const mat = eye.material as THREE.MeshStandardMaterial;
+            mat.color.set(accent);
+            mat.emissive.set(accent);
+          }
+        }
+      }
+    }
   }
 
   private mesh(
@@ -201,7 +219,6 @@ export class IslandScene {
     } else if (night === 2) {
       addIslandDisk(0, 0, 28, 0, 5);
       addIslandDisk(70, 0, 28, 0, 5);
-      // Bamboo bridge x in [26, 44], z in [-2, 2]
       this.mesh(new THREE.BoxGeometry(18, 0.36, 4), PALETTE.wood, this.terrainGroup, 35, -0.18, 0);
       for (let x = 27; x <= 43; x += 2) {
         this.mesh(new THREE.BoxGeometry(0.25, 0.42, 4.1), PALETTE.sand, this.terrainGroup, x, -0.15, 0);
@@ -210,7 +227,6 @@ export class IslandScene {
     } else {
       addIslandDisk(0, 0, 45, 0, 5);
 
-      // Tier 1 semi-annulus (r=12..24, z > 0, Y=0..3)
       const shape = new THREE.Shape();
       shape.absarc(0, 0, 24, 0, Math.PI, false);
       shape.absarc(0, 0, 12, Math.PI, 0, true);
@@ -220,12 +236,10 @@ export class IslandScene {
       tier1.position.y = 3;
       this.terrainGroup.add(tier1);
 
-      // Tier 2 (r=8, Y=0..6) & Bell Tower (r=2, Y=6..14)
       addIslandDisk(0, 0, 8, 6, 6);
       this.mesh(new THREE.CylinderGeometry(2, 2.2, 8, 16), PALETTE.wood, this.terrainGroup, 0, 10, 0);
       this.mesh(new THREE.ConeGeometry(2.8, 2.2, 8), PALETTE.gold, this.terrainGroup, 0, 15, 0);
 
-      // Ramps at 30 deg & 150 deg (length 6m from r=30 to r=24, rise 3m)
       const rampLen = Math.hypot(6, 3);
       const slope = Math.atan2(3, 6);
       for (const deg of [30, 150]) {
@@ -269,6 +283,8 @@ export class IslandScene {
     this.player.visible = !hud.respawning && !(s.player.invuln && Math.floor(elapsed * 14) % 2 === 0);
 
     const active = new Set<string>();
+    const blink1Hz = Math.sin(elapsed * Math.PI * 2) >= 0;
+
     for (const l of s.lanterns) {
       const key = 'lantern:' + l.id;
       active.add(key);
@@ -277,8 +293,46 @@ export class IslandScene {
         this.mesh(new THREE.CylinderGeometry(1.15, 1.55, 0.5, 8), PALETTE.wood, group, 0, 0.25, 0);
         for (const x of [-0.6, 0.6]) this.mesh(new THREE.CylinderGeometry(0.1, 0.1, 2.5, 8), PALETTE.wood, group, x, 1.75, 0);
         this.mesh(new THREE.ConeGeometry(1.5, 0.9, 6), PALETTE.lanternUnlit, group, 0, 3.2, 0);
+
         const orb = this.mesh(new THREE.SphereGeometry(0.8, 14, 10), PALETTE.lanternUnlit, group, 0, 2.1, 0);
         orb.name = 'orb';
+
+        // Visible tear strips on unlit lanterns (color-independent cue)
+        const tears = new THREE.Group();
+        tears.name = 'tears';
+        for (const [tx, tz, rot] of [
+          [0.42, 0.68, 0.45],
+          [-0.45, 0.65, -0.5],
+          [0, -0.78, 0.35]
+        ] as [number, number, number][]) {
+          const tear = new THREE.Mesh(
+            new THREE.BoxGeometry(0.14, 0.72, 0.08),
+            new THREE.MeshBasicMaterial({ color: '#14151c' })
+          );
+          tear.position.set(tx, 2.05, tz);
+          tear.rotation.z = rot;
+          tears.add(tear);
+        }
+        group.add(tears);
+
+        // Overhead fuel bar (visible when lit)
+        const fuelBar = new THREE.Group();
+        fuelBar.name = 'fuelBar';
+        fuelBar.position.set(0, 4.3, 0);
+        const bg = new THREE.Mesh(
+          new THREE.PlaneGeometry(1.9, 0.26),
+          new THREE.MeshBasicMaterial({ color: '#0E1430', side: THREE.DoubleSide })
+        );
+        fuelBar.add(bg);
+        const fill = new THREE.Mesh(
+          new THREE.PlaneGeometry(1.76, 0.16),
+          new THREE.MeshBasicMaterial({ color: PALETTE.lanternLit, side: THREE.DoubleSide })
+        );
+        fill.name = 'fuelFill';
+        fill.position.z = 0.02;
+        fuelBar.add(fill);
+        group.add(fuelBar);
+
         const ring = new THREE.Mesh(
           new THREE.RingGeometry(T.safe_radius - 0.12, T.safe_radius, 48),
           new THREE.MeshBasicMaterial({ color: PALETTE.lanternLit, transparent: true, opacity: 0.34, side: THREE.DoubleSide })
@@ -287,6 +341,7 @@ export class IslandScene {
         ring.position.y = 0.05;
         ring.name = 'safe';
         group.add(ring);
+
         const point = new THREE.PointLight(PALETTE.lanternLit, 0, 15);
         point.position.y = 2.3;
         point.name = 'light';
@@ -294,13 +349,35 @@ export class IslandScene {
         return group;
       });
       g.position.set(l.pos[0], l.pos[1], l.pos[2]);
+
       const orb = g.getObjectByName('orb') as THREE.Mesh;
       const mat = orb.material as THREE.MeshStandardMaterial;
+      const tears = g.getObjectByName('tears')!;
+      const fuelBar = g.getObjectByName('fuelBar')!;
+      const fuelFill = g.getObjectByName('fuelFill') as THREE.Mesh;
+      const fillMat = fuelFill.material as THREE.MeshBasicMaterial;
+      const lowFuel = l.lit && l.fuel < T.low_fuel_threshold;
+      const pulseOn = !lowFuel || blink1Hz;
+
+      // Color-independent unlit shape: squashed 20% + visible paper tears
+      orb.scale.set(1, l.lit ? 1 : 0.8, 1);
+      tears.visible = !l.lit;
+
       mat.color.set(l.lit ? PALETTE.lanternCore : PALETTE.lanternUnlit);
       mat.emissive.set(l.lit ? PALETTE.lanternLit : '#000000');
-      mat.emissiveIntensity = l.lit ? 1.8 : 0;
-      g.getObjectByName('safe')!.visible = l.lit;
-      (g.getObjectByName('light') as THREE.PointLight).intensity = l.lit ? 14 : 0;
+      mat.emissiveIntensity = l.lit ? (pulseOn ? 1.8 : 0.35) : 0;
+
+      fuelBar.visible = l.lit && pulseOn;
+      if (l.lit) {
+        const ratio = Math.max(0.02, Math.min(1, l.fuel / T.fuel_max));
+        fuelFill.scale.x = ratio;
+        fuelFill.position.x = -0.88 * (1 - ratio);
+        fillMat.color.set(lowFuel ? (this.colorblind ? '#FFFFFF' : PALETTE.danger) : PALETTE.lanternLit);
+        fuelBar.lookAt(this.camera.position);
+      }
+
+      g.getObjectByName('safe')!.visible = l.lit && l.fuel >= T.low_fuel_threshold;
+      (g.getObjectByName('light') as THREE.PointLight).intensity = l.lit ? (pulseOn ? 14 : 4) : 0;
     }
 
     for (const m of s.motes) {
@@ -319,6 +396,7 @@ export class IslandScene {
       g.position.set(m.pos[0], m.pos[1] + 0.9 + Math.sin(elapsed * 2.4 + m.pos[0]) * 0.2, m.pos[2]);
     }
 
+    const shadeAccent = this.colorblind ? PALETTE.shadeRimColorblind : PALETTE.shadeRim;
     for (const sh of s.shades) {
       const key = 'shade:' + sh.id;
       active.add(key);
@@ -329,12 +407,15 @@ export class IslandScene {
         body.scale.y = 1.3;
         const rim = new THREE.Mesh(
           new THREE.TorusGeometry(0.76, 0.06, 6, 18),
-          new THREE.MeshBasicMaterial({ color: PALETTE.shadeRim })
+          new THREE.MeshBasicMaterial({ color: shadeAccent })
         );
         rim.rotation.x = Math.PI / 2;
         rim.name = 'rim';
         group.add(rim);
-        for (const x of [-0.22, 0.22]) this.mesh(new THREE.SphereGeometry(0.1, 6, 6), PALETTE.shadeRim, group, x, 0.32, 0.65, true);
+        const eyeL = this.mesh(new THREE.SphereGeometry(0.1, 6, 6), shadeAccent, group, -0.22, 0.32, 0.65, true);
+        eyeL.name = 'eyeL';
+        const eyeR = this.mesh(new THREE.SphereGeometry(0.1, 6, 6), shadeAccent, group, 0.22, 0.32, 0.65, true);
+        eyeR.name = 'eyeR';
         return group;
       });
       g.position.set(sh.pos[0], sh.pos[1] + Math.sin(elapsed * 2.2) * 0.1, sh.pos[2]);
@@ -342,7 +423,8 @@ export class IslandScene {
       const bodyMat = (g.getObjectByName('body') as THREE.Mesh).material as THREE.MeshStandardMaterial;
       bodyMat.color.set(sh.state === 'stunned' ? PALETTE.shadeStunned : PALETTE.shadeBody);
       g.rotation.z = sh.state === 'stunned' ? 0.25 * Math.sin(elapsed * 20) : 0;
-      g.scale.setScalar(sh.state === 'spawning' ? 0.6 + 0.4 * Math.sin(elapsed * 12) : 1);
+      const drainScale = sh.state === 'drain' ? 1 + 0.15 * Math.sin(elapsed * 10) : 1;
+      g.scale.setScalar(sh.state === 'spawning' ? 0.6 + 0.4 * Math.sin(elapsed * 12) : drainScale);
     }
 
     for (const d of s.drifters) {
@@ -406,7 +488,6 @@ export class IslandScene {
       return true;
     });
 
-    // Wind leaves visual during warning or active gust
     const showLeaves = hud.wind_warning || hud.wind_active;
     const windRad = (hud.wind_dir_deg * Math.PI) / 180;
     this.leaves.forEach((leaf, idx) => {

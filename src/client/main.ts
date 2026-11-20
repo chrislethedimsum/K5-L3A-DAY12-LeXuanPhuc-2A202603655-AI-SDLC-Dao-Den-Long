@@ -19,7 +19,14 @@ try {
 
 const audio = new GameAudio();
 let settings: GameSettings = loadSettings();
-audio.setVolume(settings.volume);
+
+function applyVisualSettings(s: GameSettings): void {
+  audio.setVolume(s.volume);
+  document.body.classList.toggle('colorblind', s.colorblind);
+  scene.setColorblind(s.colorblind);
+}
+
+applyVisualSettings(settings);
 
 let currentNight: NightNumber = 1;
 let totalScore = 0;
@@ -89,7 +96,7 @@ const hud = new HUD(settings, {
   onSettingsChange: (next) => {
     settings = next;
     saveSettings(next);
-    audio.setVolume(next.volume);
+    applyVisualSettings(next);
   },
   onDeposit: () => {
     interactQueued = true;
@@ -171,7 +178,9 @@ function handleEvents(events: GameEvent[], prevGrounded: boolean): void {
   for (const e of events) {
     if (e.name === 'mote_picked') audio.playPickup();
     else if (e.name === 'deposit') audio.playDeposit();
+    else if (e.name === 'refuel') audio.playRefuel();
     else if (e.name === 'lantern_lit') audio.playLanternLit();
+    else if (e.name === 'lantern_out') audio.playLanternOut();
     else if (e.name === 'pulse') audio.playPulse();
     else if (e.name === 'player_hit') audio.playHit();
     else if (e.name === 'dash') audio.playDash();
@@ -190,7 +199,6 @@ function handleEvents(events: GameEvent[], prevGrounded: boolean): void {
   }
 }
 
-// FPS measurement hook for automated verification
 const fpsTracker = { frames: 0, elapsedMs: 0, fps: 0, avgMs: 0 };
 (window as unknown as { __DDL_FPS__: typeof fpsTracker }).__DDL_FPS__ = fpsTracker;
 

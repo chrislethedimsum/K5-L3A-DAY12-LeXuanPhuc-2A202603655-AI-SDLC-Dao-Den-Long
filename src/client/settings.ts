@@ -1,23 +1,27 @@
 export interface GameSettings {
   volume: number;
   sensitivity: number;
+  colorblind: boolean;
 }
 
 const STORAGE_KEY = 'dao_den_long_settings_v1';
-const DEFAULTS: GameSettings = { volume: 0.7, sensitivity: 1.0 };
+const DEFAULTS: GameSettings = { volume: 0.7, sensitivity: 1.0, colorblind: false };
 
 export function loadSettings(): GameSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULTS };
     const parsed = JSON.parse(raw) as Partial<GameSettings>;
-    const volume = typeof parsed.volume === 'number' && Number.isFinite(parsed.volume)
-      ? Math.min(1, Math.max(0, parsed.volume))
-      : DEFAULTS.volume;
-    const sensitivity = typeof parsed.sensitivity === 'number' && Number.isFinite(parsed.sensitivity)
-      ? Math.min(2, Math.max(0.3, parsed.sensitivity))
-      : DEFAULTS.sensitivity;
-    return { volume, sensitivity };
+    const volume =
+      typeof parsed.volume === 'number' && Number.isFinite(parsed.volume)
+        ? Math.min(1, Math.max(0, parsed.volume))
+        : DEFAULTS.volume;
+    const sensitivity =
+      typeof parsed.sensitivity === 'number' && Number.isFinite(parsed.sensitivity)
+        ? Math.min(2, Math.max(0.3, parsed.sensitivity))
+        : DEFAULTS.sensitivity;
+    const colorblind = typeof parsed.colorblind === 'boolean' ? parsed.colorblind : DEFAULTS.colorblind;
+    return { volume, sensitivity, colorblind };
   } catch {
     return { ...DEFAULTS };
   }

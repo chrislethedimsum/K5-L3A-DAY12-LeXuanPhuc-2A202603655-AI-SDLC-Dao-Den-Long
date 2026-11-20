@@ -14,7 +14,8 @@ export class GameAudio {
   unlock(): void {
     try {
       if (!this.ctx) {
-        const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        const AudioCtx =
+          window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
         if (!AudioCtx) return;
         this.ctx = new AudioCtx();
         this.master = this.ctx.createGain();
@@ -67,9 +68,15 @@ export class GameAudio {
   playDeposit(): void {
     this.tone(440, 660, 0.1, 'sine', 0.2);
   }
+  playRefuel(): void {
+    this.tone(520, 780, 0.14, 'triangle', 0.2);
+  }
   playLanternLit(): void {
     this.tone(523, 784, 0.25, 'triangle', 0.28);
     setTimeout(() => this.tone(784, 1046, 0.35, 'sine', 0.26), 110);
+  }
+  playLanternOut(): void {
+    this.tone(320, 140, 0.3, 'triangle', 0.24);
   }
   playPulse(): void {
     this.tone(330, 880, 0.28, 'sine', 0.3);

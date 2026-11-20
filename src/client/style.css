@@ -78,7 +78,7 @@ canvas:active {
 
 .timer-box {
   text-align: center;
-  min-width: 148px;
+  min-width: 168px;
 }
 
 .timer-value {
@@ -92,6 +92,10 @@ canvas:active {
 .timer-value.danger {
   color: #FF5A5F;
   animation: pulse-blink 0.85s ease-in-out infinite;
+}
+
+body.colorblind .timer-value.danger {
+  color: #FFFFFF;
 }
 
 @keyframes pulse-blink {
@@ -178,8 +182,13 @@ button.primary:hover:not(:disabled) {
 }
 
 .banner.wind {
-  border-color: #8FA3B8;
-  color: #FFE58A;
+  border-color: #FF5A5F;
+  color: #FF5A5F;
+}
+
+body.colorblind .banner.wind {
+  border-color: #FFFFFF;
+  color: #FFFFFF;
 }
 
 .banner.prompt {
@@ -211,12 +220,15 @@ button.primary:hover:not(:disabled) {
 
 .mote-slots {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 280px;
   gap: 5px;
 }
 
 .mote-slot {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   border-radius: 5px;
   background: rgba(91, 95, 110, 0.35);
   border: 1px solid rgba(245, 241, 230, 0.18);
@@ -322,6 +334,21 @@ button.primary:hover:not(:disabled) {
   text-align: left;
   margin: 14px 0;
   font: 14px system-ui, sans-serif;
+}
+
+.setting-toggle {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 6px;
+  cursor: pointer;
+}
+
+.setting-toggle input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+  accent-color: #00B3FF;
+  cursor: pointer;
 }
 
 .setting-row input[type='range'] {

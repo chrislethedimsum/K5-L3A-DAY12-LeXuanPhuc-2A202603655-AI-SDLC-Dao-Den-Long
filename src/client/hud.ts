@@ -42,6 +42,7 @@ export class HUD {
   private modalActions: HTMLElement;
   private settings: GameSettings;
   private cb: HUDCallbacks;
+  private renderedCapacity = 0;
 
   constructor(initialSettings: GameSettings, cb: HUDCallbacks) {
     this.settings = { ...initialSettings };
@@ -55,12 +56,12 @@ export class HUD {
         </div>
         <div class="hud-box timer-box">
           <span class="label" id="night-label">Đêm 1 · Đảo Bến</span>
-          <div class="timer-value" id="timer">05:00</div>
+          <div class="timer-value" id="timer">04:00</div>
         </div>
         <div class="hud-box right-box">
           <div class="metric">
             <span class="label">Đèn lồng</span>
-            <strong id="lanterns">0/5</strong>
+            <strong id="lanterns">0/5 · cần 3</strong>
           </div>
           <div class="metric score">
             <span class="label">Điểm</span>
@@ -79,7 +80,7 @@ export class HUD {
       <div class="bottom-bar">
         <div class="controls-hint">
           WASD / ↑↓←→ di chuyển · Kéo chuột xoay<br>
-          Space nhảy · Shift lướt · E nạp đèn · Q tỏa sáng · Esc/P tạm dừng
+          Space nhảy · Shift lướt · E nạp/châm dầu · Q tỏa sáng · Esc/P tạm dừng
         </div>
         <div class="hud-box mote-bar-wrap">
           <span class="label" id="mote-label">Đom đóm (0/10)</span>
@@ -124,11 +125,7 @@ export class HUD {
     this.modalExtra = this.root.querySelector('#modal-extra')!;
     this.modalActions = this.root.querySelector('#modal-actions')!;
 
-    for (let i = 0; i < t.carry_capacity; i++) {
-      const slot = document.createElement('div');
-      slot.className = 'mote-slot';
-      this.moteSlotsEl.appendChild(slot);
-    }
+    this.syncMoteSlotCount(t.carry_capacity);
 
     this.root.querySelector<HTMLButtonElement>('#pause-btn')!.onclick = () => this.cb.onPause();
     this.depositBtn.onclick = () => this.cb.onDeposit();
@@ -136,7 +133,24 @@ export class HUD {
     this.dashBtn.onclick = () => this.cb.onDash();
   }
 
-  private showModal(sub: string, title: string, body: string, buttons: { label: string; primary?: boolean; onClick: () => void }[], extraEl?: HTMLElement): void {
+  private syncMoteSlotCount(cap: number): void {
+    if (this.renderedCapacity === cap) return;
+    this.renderedCapacity = cap;
+    this.moteSlotsEl.innerHTML = '';
+    for (let i = 0; i < cap; i++) {
+      const slot = document.createElement('div');
+      slot.className = 'mote-slot';
+      this.moteSlotsEl.appendChild(slot);
+    }
+  }
+
+  private showModal(
+    sub: string,
+    title: string,
+    body: string,
+    buttons: { label: string; primary?: boolean; onClick: () => void }[],
+    extraEl?: HTMLElement
+  ): void {
     this.modalSub.textContent = sub;
     this.modalTitle.textContent = title;
     this.modalBody.textContent = body;
@@ -170,7 +184,7 @@ export class HUD {
     this.showModal(
       'Day 12 · AI SDLC',
       'Đảo Đèn Lồng',
-      'Đồng hành cùng Mây qua 3 đêm — Đảo Bến, Đảo Cau, Đảo Chuông — thu thập đom đóm, né Bóng Mực và Gió Lạc để thắp sáng biển mây.',
+      'Đồng hành cùng Mây qua 3 đêm — Đảo Bến, Đảo Cau, Đảo Chuông — thắp đèn và giữ đảo sáng tới bình minh.',
       [
         { label: 'Bắt đầu hành trình (Đêm 1 → 3)', primary: true, onClick: () => this.cb.onStartCampaign(1) },
         { label: 'Cài đặt', onClick: () => this.showSettings(() => this.showMainMenu()) }
@@ -181,10 +195,11 @@ export class HUD {
 
   showNightIntro(night: NightNumber, totalScore: number): void {
     const m = NIGHT_MAPS[night];
+    const needed = Math.ceil(t.win_ratio * m.lanterns.length);
     this.showModal(
       `${m.subtitle} · Điểm tích lũy: ${totalScore}`,
       m.name,
-      m.elderLine,
+      `${m.elderLine} (Giữ ít nhất ${needed}/${m.lanterns.length} đèn sáng tới bình minh!)`,
       [
         { label: `Bắt đầu Đêm ${night}`, primary: true, onClick: () => this.cb.onStartNight() },
         { label: 'Về menu', onClick: () => this.cb.onBackToMenu() }
@@ -196,7 +211,7 @@ export class HUD {
     this.showModal(
       'Tạm dừng',
       'Một nhịp nghỉ giữa đêm',
-      'Đồng hồ, hồi chiêu và mọi thực thể đã được giữ nguyên trạng thái.',
+      'Đồng hồ, nhiên liệu và mọi thực thể đã được giữ nguyên trạng thái.',
       [
         { label: 'Tiếp tục', primary: true, onClick: () => this.cb.onResume() },
         { label: 'Chơi lại Đêm', onClick: () => this.cb.onRestartNight() },
@@ -217,9 +232,15 @@ export class HUD {
         <span>Độ nhạy chuột: <strong id="sens-val">${this.settings.sensitivity.toFixed(1)}x</strong></span>
         <input id="sens-slider" type="range" min="0.3" max="2.0" step="0.1" value="${this.settings.sensitivity}">
       </label>
+      <label class="setting-row setting-toggle">
+        <span>Bảng màu dễ phân biệt</span>
+        <input id="cb-toggle" type="checkbox" ${this.settings.colorblind ? 'checked' : ''}>
+      </label>
     `;
     const volSlider = box.querySelector<HTMLInputElement>('#vol-slider')!;
     const sensSlider = box.querySelector<HTMLInputElement>('#sens-slider')!;
+    const cbToggle = box.querySelector<HTMLInputElement>('#cb-toggle')!;
+
     volSlider.oninput = () => {
       this.settings.volume = Number(volSlider.value);
       box.querySelector('#vol-val')!.textContent = `${Math.round(this.settings.volume * 100)}%`;
@@ -230,10 +251,18 @@ export class HUD {
       box.querySelector('#sens-val')!.textContent = `${this.settings.sensitivity.toFixed(1)}x`;
       this.cb.onSettingsChange({ ...this.settings });
     };
+    cbToggle.onchange = () => {
+      this.settings.colorblind = cbToggle.checked;
+      this.cb.onSettingsChange({ ...this.settings });
+    };
 
-    this.showModal('Tùy chỉnh', 'Cài đặt', 'Thiết lập được lưu tự động cho các lần mở game sau.', [
-      { label: 'Quay lại', primary: true, onClick: onClose }
-    ], box);
+    this.showModal(
+      'Tùy chỉnh',
+      'Cài đặt',
+      'Thiết lập được lưu tự động cho các lần mở game sau.',
+      [{ label: 'Quay lại', primary: true, onClick: onClose }],
+      box
+    );
   }
 
   showNightResult(night: NightNumber, won: boolean, reason: string | null, nightScore: number, totalScore: number): void {
@@ -241,7 +270,7 @@ export class HUD {
       this.showModal(
         'Hoàn thành cả 3 Đêm!',
         'Bình Minh',
-        `Toàn bộ Đảo Bến, Đảo Cau và Đảo Chuông đã bừng sáng. Điểm Đêm 3: ${nightScore} · Tổng điểm chiến dịch: ${totalScore}.`,
+        `Bạn đã giữ đảo sáng tới bình minh qua Đảo Bến, Đảo Cau và Đảo Chuông. Điểm Đêm 3: ${nightScore} · Tổng điểm chiến dịch: ${totalScore}.`,
         [
           { label: 'Chơi lại từ Đêm 1', primary: true, onClick: () => this.cb.onStartCampaign(1) },
           { label: 'Về menu', onClick: () => this.cb.onBackToMenu() }
@@ -252,7 +281,7 @@ export class HUD {
 
     if (won) {
       this.showModal(
-        `Hoàn thành Đêm ${night}`,
+        `Sống sót tới bình minh · Đêm ${night}`,
         `${NIGHT_MAPS[night].name} đã rạng sáng`,
         `Điểm Đêm ${night}: ${nightScore} · Tổng điểm hiện tại: ${totalScore}.`,
         [
@@ -262,7 +291,10 @@ export class HUD {
         ]
       );
     } else {
-      const msg = reason === 'dawn' ? 'Bình minh đã đến trước khi thắp đủ đèn.' : 'Mây đã mất hết Ngọn Lửa.';
+      const msg =
+        reason === 'dawn'
+          ? 'Bình minh đã đến nhưng số đèn đang sáng chưa đủ ngưỡng yêu cầu.'
+          : 'Mây đã mất hết Ngọn Lửa.';
       this.showModal(
         `Đêm ${night} · ${NIGHT_MAPS[night].name}`,
         'Ánh sáng tạm tắt',
@@ -281,26 +313,45 @@ export class HUD {
     this.flamesEl.innerHTML = `${'●'.repeat(p.flames)}<span class="empty">${'○'.repeat(t.flames - p.flames)}</span>`;
 
     const secs = Math.ceil(s.time_left_s);
-    this.timerEl.textContent = `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`;
-    this.timerEl.classList.toggle('danger', s.time_left_s <= 30 && s.state === 'playing');
+    const timeText = `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`;
+    const inDangerTime = s.time_left_s <= 30 && s.state === 'playing';
+    this.timerEl.textContent = inDangerTime && this.settings.colorblind ? `⚠ ${timeText}` : timeText;
+    this.timerEl.classList.toggle('danger', inDangerTime);
 
     const litCount = s.lanterns.filter((l) => l.lit).length;
-    this.lanternsEl.textContent = `${litCount}/${s.lanterns.length}`;
+    const needed = Math.ceil(t.win_ratio * s.lanterns.length);
+    this.lanternsEl.textContent = `${litCount}/${s.lanterns.length} (cần ${needed})`;
     this.scoreEl.textContent = `${totalScore + s.score}`;
 
-    this.root.querySelector('#mote-label')!.textContent = `Đom đóm (${p.carried}/${t.carry_capacity})`;
+    this.syncMoteSlotCount(p.capacity);
+    this.root.querySelector('#mote-label')!.textContent = `Đom đóm (${p.carried}/${p.capacity})`;
     const slots = this.moteSlotsEl.children;
     for (let i = 0; i < slots.length; i++) {
       slots[i].classList.toggle('filled', i < p.carried);
     }
 
-    const nearUnlit = s.lanterns
-      .filter((l) => !l.lit && Math.hypot(l.pos[0] - p.pos[0], l.pos[2] - p.pos[2]) <= t.interact_radius && Math.abs(l.pos[1] - p.pos[1]) <= 2.0)
-      .sort((a, b) => Math.hypot(a.pos[0] - p.pos[0], a.pos[2] - p.pos[2]) - Math.hypot(b.pos[0] - p.pos[0], b.pos[2] - p.pos[2]) || a.id.localeCompare(b.id))[0];
+    const nearEligible = s.lanterns
+      .filter(
+        (l) =>
+          (!l.lit || l.fuel < t.fuel_max) &&
+          Math.hypot(l.pos[0] - p.pos[0], l.pos[2] - p.pos[2]) <= t.interact_radius &&
+          Math.abs(l.pos[1] - p.pos[1]) <= 2.0
+      )
+      .sort(
+        (a, b) =>
+          Math.hypot(a.pos[0] - p.pos[0], a.pos[2] - p.pos[2]) -
+            Math.hypot(b.pos[0] - p.pos[0], b.pos[2] - p.pos[2]) || a.id.localeCompare(b.id)
+      )[0];
 
-    if (nearUnlit && s.state === 'playing') {
+    if (nearEligible && s.state === 'playing') {
       this.promptEl.hidden = false;
-      this.promptEl.textContent = `E — Nạp ánh sáng (${nearUnlit.deposited}/${t.lantern_cost})`;
+      if (nearEligible.lit) {
+        this.promptEl.textContent = `E — Châm dầu (${Math.round(nearEligible.fuel)}%)`;
+      } else if (nearEligible.ever_lit) {
+        this.promptEl.textContent = `E — Thắp lại đèn (${nearEligible.deposited}/${t.relight_cost})`;
+      } else {
+        this.promptEl.textContent = `E — Nạp ánh sáng (${nearEligible.deposited}/${t.lantern_cost})`;
+      }
     } else {
       this.promptEl.hidden = true;
     }
@@ -308,23 +359,37 @@ export class HUD {
     this.charmBannerEl.hidden = hud.charm_s <= 0;
     if (hud.charm_s > 0) this.charmBannerEl.textContent = `Bùa Gió đang kích hoạt (${hud.charm_s.toFixed(1)}s)`;
 
-    this.windBannerEl.hidden = !hud.wind_warning && !hud.wind_active;
-    if (hud.wind_active) this.windBannerEl.textContent = `Gió mạnh đang thổi (${hud.wind_dir_deg}°)`;
-    else if (hud.wind_warning) this.windBannerEl.textContent = 'Cảnh báo: Gió mạnh sắp tới!';
+    const lowFuelLanterns = s.lanterns.filter((l) => l.lit && l.fuel < t.low_fuel_threshold);
+    this.windBannerEl.hidden = !hud.wind_warning && !hud.wind_active && lowFuelLanterns.length === 0;
+    const warnPrefix = this.settings.colorblind ? '⚠ ' : '';
+    if (hud.wind_active) {
+      this.windBannerEl.textContent = `${warnPrefix}Gió mạnh đang thổi (${hud.wind_dir_deg}°)`;
+    } else if (hud.wind_warning) {
+      this.windBannerEl.textContent = `${warnPrefix}Cảnh báo: Gió mạnh sắp tới!`;
+    } else if (lowFuelLanterns.length > 0) {
+      this.windBannerEl.textContent = `${warnPrefix}${lowFuelLanterns[0].id} sắp cạn dầu (${Math.round(lowFuelLanterns[0].fuel)}%)!`;
+    }
 
-    this.depositBtn.disabled = !nearUnlit || p.carried === 0 || s.state !== 'playing';
+    this.depositBtn.disabled = !nearEligible || p.carried === 0 || s.state !== 'playing';
     this.dashBtn.disabled = (hud.dash_cd_s > 0 && hud.charm_s <= 0) || s.state !== 'playing';
-    this.dashBtn.textContent = hud.dash_cd_s > 0 && hud.charm_s <= 0 ? `Lướt ${hud.dash_cd_s.toFixed(1)}s` : 'Shift · Lướt';
+    this.dashBtn.textContent =
+      hud.dash_cd_s > 0 && hud.charm_s <= 0 ? `Lướt ${hud.dash_cd_s.toFixed(1)}s` : 'Shift · Lướt';
     this.pulseBtn.disabled = p.carried < t.pulse_cost || hud.pulse_cd_s > 0 || s.state !== 'playing';
-    this.pulseBtn.textContent = hud.pulse_cd_s > 0 ? `Tỏa sáng ${hud.pulse_cd_s.toFixed(1)}s` : `Q · Tỏa sáng (${t.pulse_cost})`;
+    this.pulseBtn.textContent =
+      hud.pulse_cd_s > 0 ? `Tỏa sáng ${hud.pulse_cd_s.toFixed(1)}s` : `Q · Tỏa sáng (${t.pulse_cost})`;
 
-    // Off-screen arrow to nearest unlit lantern
-    const nearestUnlit = s.lanterns
-      .filter((l) => !l.lit)
-      .sort((a, b) => Math.hypot(a.pos[0] - p.pos[0], a.pos[2] - p.pos[2]) - Math.hypot(b.pos[0] - p.pos[0], b.pos[2] - p.pos[2]))[0];
+    // Arrow points to nearest priority lantern (low-fuel lit lantern first, else nearest unlit)
+    const priorityTarget =
+      s.lanterns
+        .filter((l) => !l.lit || l.fuel < t.low_fuel_threshold)
+        .sort(
+          (a, b) =>
+            Math.hypot(a.pos[0] - p.pos[0], a.pos[2] - p.pos[2]) -
+            Math.hypot(b.pos[0] - p.pos[0], b.pos[2] - p.pos[2])
+        )[0] ?? null;
 
-    if (nearestUnlit && s.state === 'playing') {
-      const proj = projectFn(nearestUnlit.pos);
+    if (priorityTarget && s.state === 'playing') {
+      const proj = projectFn(priorityTarget.pos);
       if (!proj.onScreen) {
         let nx = proj.inFront ? proj.x : -proj.x;
         let ny = proj.inFront ? proj.y : -proj.y;
