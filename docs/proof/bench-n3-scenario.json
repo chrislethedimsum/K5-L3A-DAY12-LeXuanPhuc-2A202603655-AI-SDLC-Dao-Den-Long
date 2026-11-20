@@ -1,1 +1,1 @@
-{"night":3,"wind_enabled":false,"lanterns":[{"id":"L1","pos":[0,6,6],"lit":true}],"player":{"pos":[0,6,4]}}
+{"night":3,"wind_enabled":false,"lanterns":[{"id":"L1","pos":[0,6,6],"lit":true,"fuel":100}],"player":{"pos":[0,6,4]}}

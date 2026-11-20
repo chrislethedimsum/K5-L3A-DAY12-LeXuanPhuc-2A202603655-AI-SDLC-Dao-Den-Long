@@ -1,4 +1,4 @@
-PASS all 14 Test Contract v1.1 events
+PASS all 17 Test Contract v1.2 events
 night_start
 deposit
 lantern_lit
@@ -13,3 +13,6 @@ drifter_drop
 charm_picked
 paused
 resumed
+refuel
+lantern_out
+fuel_drain

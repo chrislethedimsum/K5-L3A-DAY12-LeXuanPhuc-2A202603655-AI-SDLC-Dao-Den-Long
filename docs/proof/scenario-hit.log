@@ -1,2 +1,2 @@
 $ /opt/homebrew/Cellar/node/26.13.1_2/bin/node dist-headless/src/headless/cli.js --seed 42 --night 1 --scenario tests/fixtures/hit.json --inputs tests/fixtures/hit-inputs.json --ticks 120 --out docs/proof/hit.jsonl
-exit=0 elapsed_ms=48
+exit=0 elapsed_ms=46

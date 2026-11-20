@@ -1,7 +1,7 @@
 $ /opt/homebrew/Cellar/node/26.13.1_2/bin/node scripts/smoke.mjs
-exit=0 elapsed_ms=259
-PASS 3 nights initialized deterministically
-PASS dash + fall + respawn + charm + drifter + pause core invariants
+exit=0 elapsed_ms=258
+PASS 3 nights initialized deterministically with Ticket-03 durations and fuel fields
+PASS fuel decay, lantern_out, relight for 5, refuel, capacity growth, and dawn_survived
 PASS CLI Night 3 malformed flags exit 2
 PASS CLI invalid inputs exit 2
 4 smoke checks passed.

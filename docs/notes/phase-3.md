@@ -7,7 +7,7 @@
 
 | Quy tắc cũ (Phase 1–2) | Luật mới Ticket-03 (Contract v1.2) | Ảnh hưởng tới test cũ |
 |---|---|---|
-| Đèn sáng giữ nguyên vĩnh viễn (`lit: true`) | Đèn sáng có `fuel = 100`, hao `1.0/s`, tắt khi `fuel <= 0` (`lantern_out`), thắp lại tốn `5` đom đóm | Các test giữ đèn sáng lâu qua nhiều nghìn tick hoặc check `relight` được cập nhật thêm `fuel` / `relight_cost` |
+| Đèn sáng giữ nguyên vĩnh viễn (`lit: true`) | Đèn sáng có `fuel = 100`, hao `1.0/s`, tắt khi `fuel <= 0` (`lantern_out`), thắp lại tốn `5` đom đóm | Các test giữ đèn sáng lâu hoặc check `relight` được cập nhật thêm `fuel` / `relight_cost` |
 | Đèn sáng không nhận tương tác | Bấm Tương tác trên đèn sáng chưa đầy dầu châm `used = min(carried, ceil((100 - fuel)/10))`; đầy dầu bị bỏ qua | Test tương tác đèn sáng cập nhật để kiểm tra `refuel` và bỏ qua khi `fuel == 100` |
 | Mọi đèn sáng luôn tạo vùng an toàn `6 m` | Chỉ đèn sáng có `fuel >= 30` tạo vùng an toàn; `< 30` thu hút Bóng Mực `wander` vào trạng thái `drain` (`5 fuel/s`) | Các test safe-zone cập nhật phân biệt `fuel >= 30` vs `< 30` và thêm test đẩy Shade khi châm dầu lên `>= 30` |
 | Thắng ngay khi thắp hết đèn (`all_lit`) | Không thắng sớm; thắng (`dawn_survived`) khi sống hết giờ `240/270/300s` và có `>= ceil(0.6 * total)` đèn sáng (`3/5`, `4/6`, `5/7`) | Cập nhật `win` fixture + các test kết thúc thắng từ `all_lit` sang `dawn_survived` |
@@ -22,5 +22,12 @@
 5. **Điểm mới:** Đúng bảng điểm mục 5; tổng điểm chiến dịch cộng dồn qua các Đêm thắng.
 6. **Chế độ mù màu & Phân biệt không cần màu:** Cài đặt `"Bảng màu dễ phân biệt"` lưu `localStorage`, đổi viền/mắt Bóng Mực sang `#00B3FF`, cảnh báo `#FFFFFF` kèm `⚠`. Đèn tắt xẹp 20% + vết rách; đèn yếu `< 30` nhấp nháy `1 Hz`.
 
-## 4. Nhật ký sử dụng AI, Lỗi phát hiện & Token (Cập nhật sau kiểm chứng)
-*(Sẽ cập nhật số liệu thực tế và kết quả kiểm chứng sau khi hoàn tất Commit 5.)*
+## 4. Nhật ký sử dụng AI, Lỗi phát hiện & Token
+
+- **Các lỗi đã phát hiện & cách khắc phục:**
+  1. *Lỗi tham chiếu biến `T` thay vì `t` trong `src/client/hud.ts`:* Khi thêm kiểm tra `fuel_max` và `low_fuel_threshold` vào prompt `E` và mũi tên ưu tiên đèn yếu, viết nhầm `T.fuel_max`; phát hiện ngay ở `tsc --noEmit` của `npm run verify` và sửa về `t.fuel_max` / `t.low_fuel_threshold`.
+  2. *Chi tiết hành vi hao nhiên liệu tick 1 khi test châm dầu (`L1` full):* Khi `L1` bắt đầu ở `fuel: 100` (`6000`), bước 2 của tick 1 giảm `L1` xuống `5999/60` (`99.983`), khiến `ceil((100 - fuel)/10) = 1` ở bước 5 và làm `L1` vẫn nhận 1 đom đóm nếu đứng ngay tại `(0,0,0)`. Đã tách test trong `tests/unit/phase3.test.ts` và `tests/fixtures/refuel.json` để kiểm chứng rõ ràng công thức `ceil((100 - fuel)/10)` và hành vi đẩy Bóng Mực khi châm lên `>= 30`.
+  3. *Giới hạn `evaluate_script` khi kiểm thử trình duyệt Phase 3:* Trong phiên kiểm thử Chrome `1280×720`, lệnh `evaluate_script` chờ quyền người dùng nên không đọc trực tiếp được `window.__DDL_FPS__`; đã ghi nhận trung thực trong `docs/proof/phase-3.md` thay vì suy đoán số FPS, đồng thời xác nhận trực quan qua ảnh chụp màn hình, DevTools Performance trace (`CLS: 0.00`) và 0 lỗi WebGL/JS.
+- **Ước tính token & cách tiết kiệm:**
+  - Phiên Phase 3 ước tính tiêu tốn khoảng **~55k–70k tokens** (ngắn hơn Phase 2 nhờ kiến trúc `src/core/` và `collect-proof.mjs` đã chuẩn hóa từ trước).
+  - *Cách tiết kiệm:* Giữ nguyên khung `maps.ts` & `simulation.ts`, dùng số nguyên `fuel60` sạch lỗi số thực ngay từ lần viết đầu tiên, gom toàn bộ kiểm chứng headless qua `collect-proof.mjs` chạy trong một lượt duy nhất.
