@@ -1,5 +1,5 @@
 $ npm run build
-exit=0 elapsed_ms=1861
+exit=0 elapsed_ms=1835
 
 > dao-den-long@1.0.0 build
 > tsc --noEmit && vite build && npm run build:headless
@@ -12,7 +12,7 @@ computing gzip size...
 dist/index.html                   0.55 kB │ gzip:   0.36 kB
 dist/assets/index-DXhkvja3.css    4.39 kB │ gzip:   1.60 kB
 dist/assets/index-CCnh1nFp.js   564.34 kB │ gzip: 147.32 kB
-✓ built in 471ms
+✓ built in 475ms
 
 > dao-den-long@1.0.0 build:headless
 > tsc -p tsconfig.headless.json

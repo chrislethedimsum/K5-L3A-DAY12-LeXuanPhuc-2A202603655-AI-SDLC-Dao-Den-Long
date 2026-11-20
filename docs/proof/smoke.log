@@ -1,5 +1,5 @@
 $ /opt/homebrew/Cellar/node/26.13.1_2/bin/node scripts/smoke.mjs
-exit=0 elapsed_ms=255
+exit=0 elapsed_ms=259
 PASS 3 nights initialized deterministically
 PASS dash + fall + respawn + charm + drifter + pause core invariants
 PASS CLI Night 3 malformed flags exit 2
