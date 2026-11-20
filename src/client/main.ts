@@ -1,7 +1,9 @@
-import { GameWorld } from '../core/simulation';
+import { GameWorld, type NightNumber } from '../core/simulation';
 import type { GameEvent } from '../core/types';
-import { IslandScene } from './scene';
+import { GameAudio } from './audio';
 import { HUD } from './hud';
+import { IslandScene } from './scene';
+import { loadSettings, saveSettings, type GameSettings } from './settings';
 import './style.css';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#world')!;
@@ -15,118 +17,236 @@ try {
   throw error;
 }
 
-let world = new GameWorld({ seed: 42 });
-let started = false;
-let paused = true;
+const audio = new GameAudio();
+let settings: GameSettings = loadSettings();
+audio.setVolume(settings.volume);
+
+let currentNight: NightNumber = 1;
+let totalScore = 0;
+let world = new GameWorld({ seed: 42, night: 1 });
+let screenMode: 'menu' | 'intro' | 'playing' | 'paused' | 'result' = 'menu';
 let yaw = 0;
 let accumulator = 0;
 const keys = new Set<string>();
-let pulseQueued = false;
 let interactQueued = false;
+let pulseQueued = false;
+let dashQueued = false;
+let lastCountdownSec = -1;
+let lastWindWarn = false;
 
 function clearInput(): void {
   keys.clear();
-  pulseQueued = false;
   interactQueued = false;
+  pulseQueued = false;
+  dashQueued = false;
   accumulator = 0;
 }
 
-const hud = new HUD(
-  () => {
-    if (!started || world.snapshot().state !== 'playing') {
-      world = new GameWorld({ seed: 42 });
-      scene.reset();
-      yaw = 0;
-    }
-    started = true;
-    paused = false;
-    clearInput();
-    hud.hide();
-  },
-  () => pause(),
-  () => {
-    pulseQueued = true;
-  },
-  () => {
-    interactQueued = true;
-  }
-);
-
-function pause(): void {
-  if (started && !paused && world.snapshot().state === 'playing') {
-    paused = true;
-    clearInput();
-    hud.pause();
+function loadNight(night: NightNumber, showIntro = true): void {
+  currentNight = night;
+  world = new GameWorld({ seed: 42 + night - 1, night });
+  scene.reset();
+  yaw = 0;
+  lastCountdownSec = -1;
+  lastWindWarn = false;
+  clearInput();
+  if (showIntro) {
+    screenMode = 'intro';
+    hud.showNightIntro(night, totalScore);
+  } else {
+    screenMode = 'playing';
+    hud.hideModal();
   }
 }
 
+const hud = new HUD(settings, {
+  onStartCampaign: (night) => {
+    audio.unlock();
+    totalScore = 0;
+    loadNight(night, true);
+  },
+  onStartNight: () => {
+    audio.unlock();
+    screenMode = 'playing';
+    clearInput();
+    hud.hideModal();
+  },
+  onPause: () => pauseGame(),
+  onResume: () => {
+    audio.unlock();
+    if (screenMode === 'paused') {
+      if (world.getState() === 'paused') world.step({ pause: true });
+      screenMode = 'playing';
+      clearInput();
+      hud.hideModal();
+    }
+  },
+  onRestartNight: () => {
+    audio.unlock();
+    loadNight(currentNight, false);
+  },
+  onNextNight: () => {
+    audio.unlock();
+    if (currentNight < 3) loadNight((currentNight + 1) as NightNumber, true);
+  },
+  onBackToMenu: () => {
+    screenMode = 'menu';
+    clearInput();
+    hud.showMainMenu();
+  },
+  onSettingsChange: (next) => {
+    settings = next;
+    saveSettings(next);
+    audio.setVolume(next.volume);
+  },
+  onDeposit: () => {
+    interactQueued = true;
+  },
+  onPulse: () => {
+    pulseQueued = true;
+  },
+  onDash: () => {
+    dashQueued = true;
+  }
+});
+
+function pauseGame(): void {
+  if (screenMode === 'playing' && world.getState() === 'playing') {
+    world.step({ pause: true });
+    screenMode = 'paused';
+    clearInput();
+    hud.showPause();
+  }
+}
+
+hud.showMainMenu();
+
 window.addEventListener('keydown', (e) => {
+  audio.unlock();
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code) && e.target === document.body) {
     e.preventDefault();
   }
-  if (e.code === 'Escape') {
-    pause();
+  if (e.code === 'Escape' || e.code === 'KeyP') {
+    if (screenMode === 'playing') pauseGame();
+    else if (screenMode === 'paused') {
+      if (world.getState() === 'paused') world.step({ pause: true });
+      screenMode = 'playing';
+      clearInput();
+      hud.hideModal();
+    }
     return;
   }
-  if (!paused) keys.add(e.code);
+  if (screenMode === 'playing') keys.add(e.code);
 });
+
 window.addEventListener('keyup', (e) => keys.delete(e.code));
-window.addEventListener('blur', pause);
+window.addEventListener('blur', pauseGame);
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) pause();
+  if (document.hidden) pauseGame();
 });
 
 let dragging = false;
 let lastX = 0;
 canvas.addEventListener('pointerdown', (e) => {
+  audio.unlock();
   dragging = true;
   lastX = e.clientX;
   canvas.setPointerCapture(e.pointerId);
 });
 canvas.addEventListener('pointermove', (e) => {
-  if (dragging && !paused) {
-    yaw -= (e.clientX - lastX) * 0.006;
+  if (dragging && screenMode === 'playing') {
+    yaw -= (e.clientX - lastX) * 0.006 * settings.sensitivity;
     lastX = e.clientX;
   }
 });
-canvas.addEventListener('pointerup', () => {
-  dragging = false;
-});
-canvas.addEventListener('pointercancel', () => {
-  dragging = false;
-});
+canvas.addEventListener('pointerup', () => (dragging = false));
+canvas.addEventListener('pointercancel', () => (dragging = false));
 
 const down = (...codes: string[]) => codes.some((c) => keys.has(c));
+
+function handleEvents(events: GameEvent[], prevGrounded: boolean): void {
+  const snap = world.snapshot();
+  if (prevGrounded && !snap.player.grounded && snap.player.vel[1] > 0) audio.playJump();
+  for (const e of events) {
+    if (e.name === 'mote_picked') audio.playPickup();
+    else if (e.name === 'deposit') audio.playDeposit();
+    else if (e.name === 'lantern_lit') audio.playLanternLit();
+    else if (e.name === 'pulse') audio.playPulse();
+    else if (e.name === 'player_hit') audio.playHit();
+    else if (e.name === 'dash') audio.playDash();
+    else if (e.name === 'shade_spawned') audio.playShadeSpawn();
+    else if (e.name === 'charm_picked') audio.playCharm();
+    else if (e.name === 'game_over') {
+      if (e.data.result === 'won') {
+        audio.playWin();
+        totalScore += snap.score;
+      } else {
+        audio.playLose();
+      }
+      screenMode = 'result';
+      hud.showNightResult(currentNight, e.data.result === 'won', e.data.reason, snap.score, totalScore);
+    }
+  }
+}
+
+// FPS measurement hook for automated verification
+const fpsTracker = { frames: 0, elapsedMs: 0, fps: 0, avgMs: 0 };
+(window as unknown as { __DDL_FPS__: typeof fpsTracker }).__DDL_FPS__ = fpsTracker;
+
 let last = performance.now();
 
 function frame(now: number): void {
-  const delta = Math.min((now - last) / 1000, 0.15);
+  const rawDeltaMs = Math.min(now - last, 150);
+  const delta = rawDeltaMs / 1000;
   last = now;
-  const events: GameEvent[] = [];
 
-  if (!paused) {
+  fpsTracker.frames++;
+  fpsTracker.elapsedMs += rawDeltaMs;
+  if (fpsTracker.elapsedMs > 0) {
+    fpsTracker.avgMs = fpsTracker.elapsedMs / fpsTracker.frames;
+    fpsTracker.fps = Math.round((fpsTracker.frames * 1000) / fpsTracker.elapsedMs);
+  }
+
+  const events: GameEvent[] = [];
+  if (screenMode === 'playing') {
     accumulator += delta;
-    while (accumulator >= 1 / 60) {
+    while (accumulator >= 1 / 60 && world.getState() === 'playing') {
+      const prevGrounded = world.snapshot().player.grounded;
       const mx = Number(down('KeyD', 'ArrowRight')) - Number(down('KeyA', 'ArrowLeft'));
       const mz = Number(down('KeyS', 'ArrowDown')) - Number(down('KeyW', 'ArrowUp'));
-      events.push(
-        ...world.step({
-          move: [mx, mz],
-          cam_yaw_deg: (yaw * 180) / Math.PI,
-          jump: down('Space'),
-          interact: down('KeyE') || interactQueued,
-          pulse: down('KeyQ', 'ShiftLeft', 'ShiftRight') || pulseQueued
-        })
-      );
-      pulseQueued = false;
+      const stepEvents = world.step({
+        move: [mx, mz],
+        cam_yaw_deg: (yaw * 180) / Math.PI,
+        jump: down('Space'),
+        dash: down('ShiftLeft', 'ShiftRight', 'KeyL') || dashQueued,
+        interact: down('KeyE') || interactQueued,
+        pulse: down('KeyQ') || pulseQueued
+      });
+      events.push(...stepEvents);
+      handleEvents(stepEvents, prevGrounded);
       interactQueued = false;
+      pulseQueued = false;
+      dashQueued = false;
       accumulator -= 1 / 60;
     }
   }
 
   const snapshot = world.snapshot();
   const hudState = world.hudState();
-  hud.update(snapshot, hudState);
+
+  if (screenMode === 'playing') {
+    const secs = Math.ceil(snapshot.time_left_s);
+    if (secs <= 10 && secs > 0 && secs !== lastCountdownSec) {
+      lastCountdownSec = secs;
+      audio.playCountdown();
+    }
+    if (hudState.wind_warning && !lastWindWarn) {
+      audio.playWindWarning();
+    }
+    lastWindWarn = hudState.wind_warning;
+  }
+
+  hud.update(snapshot, hudState, totalScore, (pos) => scene.projectToScreen(pos));
   scene.draw(snapshot, hudState, yaw, now / 1000, delta, events);
   requestAnimationFrame(frame);
 }
