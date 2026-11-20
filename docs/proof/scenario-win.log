@@ -1,0 +1,2 @@
+$ /opt/homebrew/Cellar/node/26.13.1_2/bin/node dist-headless/src/headless/cli.js --seed 42 --night 1 --scenario tests/fixtures/win.json --inputs tests/fixtures/win-inputs.json --ticks 120 --out docs/proof/win.jsonl
+exit=0

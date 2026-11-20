@@ -1,0 +1,18 @@
+$ /opt/homebrew/Cellar/node/26.13.1_2/bin/node scripts/smoke.mjs
+exit=0
+PASS seeded deterministic world
+PASS normalized movement, camera rotation, jump and island clamp
+PASS pickup capacity and score
+PASS partial deposit, rising edge and win
+PASS pulse cost, stun, push and cooldown
+PASS damage, dropped motes and invulnerability
+PASS overlapping safe zones never leak or damage protected player
+PASS edge safe zone respects island and exclusion together
+PASS dawn at exactly 10800 and frozen terminal state
+PASS no flames ending
+PASS periodic shade spawning
+PASS scenario initialization silent
+PASS CLI byte identical JSONL with end record
+PASS CLI malformed flags exit 2
+PASS CLI duplicate ticks and malformed JSON exit 2
+15 smoke checks passed.

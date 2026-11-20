@@ -1,0 +1,57 @@
+{
+  "mode": "full",
+  "results": [
+    {
+      "name": "tests",
+      "status": 0
+    },
+    {
+      "name": "browser-build",
+      "status": 0
+    },
+    {
+      "name": "smoke",
+      "status": 0
+    },
+    {
+      "name": "seed42-a",
+      "status": 0
+    },
+    {
+      "name": "seed42-b",
+      "status": 0
+    },
+    {
+      "name": "determinism",
+      "status": 0
+    },
+    {
+      "name": "scenario-win",
+      "status": 0
+    },
+    {
+      "name": "scenario-dawn",
+      "status": 0
+    },
+    {
+      "name": "scenario-hit",
+      "status": 0
+    },
+    {
+      "name": "scenario-pulse",
+      "status": 0
+    },
+    {
+      "name": "scenario-spawn",
+      "status": 0
+    },
+    {
+      "name": "scenario-pickup",
+      "status": 0
+    },
+    {
+      "name": "event-coverage",
+      "status": 0
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+$ npm test
+exit=0
+
+> dao-den-long@1.0.0 test
+> npm run build:headless && vitest run
+
+
+> dao-den-long@1.0.0 build:headless
+> tsc -p tsconfig.headless.json
+
+
+ RUN  v2.1.9 /Users/chris/Desktop/documents/uni/ai thuc chien/lab 12/K5-L3A-DAY12-LeXuanPhuc-2A202603655-AI-SDLC-Dao-Den-Long
+
+ ✓ tests/unit/simulation.test.ts (39 tests) 21ms
+ ✓ tests/contract/headless.test.ts (19 tests) 842ms
+ ✓ tests/unit/safe-zones.test.ts (2 tests) 2ms
+
+ Test Files  3 passed (3)
+      Tests  60 passed (60)
+   Start at  15:43:09
+   Duration  1.08s (transform 46ms, setup 0ms, collect 65ms, tests 864ms, environment 0ms, prepare 65ms)
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
