@@ -72,15 +72,7 @@ const hud = new HUD(settings, {
     hud.hideModal();
   },
   onPause: () => pauseGame(),
-  onResume: () => {
-    audio.unlock();
-    if (screenMode === 'paused') {
-      if (world.getState() === 'paused') world.step({ pause: true });
-      screenMode = 'playing';
-      clearInput();
-      hud.hideModal();
-    }
-  },
+  onResume: () => resumeGame(),
   onRestartNight: () => {
     audio.unlock();
     loadNight(currentNight, false);
@@ -113,9 +105,23 @@ const hud = new HUD(settings, {
 function pauseGame(): void {
   if (screenMode === 'playing' && world.getState() === 'playing') {
     world.step({ pause: true });
+    world.step({ pause: false });
     screenMode = 'paused';
     clearInput();
     hud.showPause();
+  }
+}
+
+function resumeGame(): void {
+  audio.unlock();
+  if (screenMode === 'paused') {
+    if (world.getState() === 'paused') {
+      world.step({ pause: false });
+      world.step({ pause: true });
+    }
+    screenMode = 'playing';
+    clearInput();
+    hud.hideModal();
   }
 }
 
@@ -128,12 +134,7 @@ window.addEventListener('keydown', (e) => {
   }
   if (e.code === 'Escape' || e.code === 'KeyP') {
     if (screenMode === 'playing') pauseGame();
-    else if (screenMode === 'paused') {
-      if (world.getState() === 'paused') world.step({ pause: true });
-      screenMode = 'playing';
-      clearInput();
-      hud.hideModal();
-    }
+    else if (screenMode === 'paused') resumeGame();
     return;
   }
   if (screenMode === 'playing') keys.add(e.code);
