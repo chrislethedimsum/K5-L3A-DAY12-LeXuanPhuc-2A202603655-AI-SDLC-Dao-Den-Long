@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { GameWorld } from '../core/simulation';
 import { number, validateInputsFile, validateScenario } from '../core/validators';
-import type { InputFrame, Scenario } from '../core/types';
+import type { InputFrame, NightNumber, Scenario } from '../core/types';
 
 function main(args: string[]): void {
   const allowed = ['seed', 'night', 'scenario', 'inputs', 'ticks', 'out', 'snapshot-every'];
@@ -22,14 +22,14 @@ function main(args: string[]): void {
   };
 
   const seed = flags.has('seed') ? integer('seed', 42, 0, 4294967295) : undefined;
-  const night = flags.has('night') ? integer('night', 1, 1, 1) : undefined;
-  const ticks = integer('ticks', 10800, 0);
+  const night = flags.has('night') ? (integer('night', 1, 1, 3) as NightNumber) : undefined;
+  const ticks = integer('ticks', 18000, 0);
   const interval = integer('snapshot-every', 10, 1);
 
   let scenario: Scenario | undefined;
   if (flags.has('scenario')) {
     const v: unknown = JSON.parse(readFileSync(flags.get('scenario')!, 'utf8'));
-    validateScenario(v);
+    validateScenario(v, night);
     scenario = v;
   }
 
@@ -50,20 +50,25 @@ function main(args: string[]): void {
     move: [0, 0],
     cam_yaw_deg: 0,
     jump: false,
+    dash: false,
     interact: false,
     pulse: false,
-    dash: false
+    pause: false
   };
 
-  for (let tick = 0; tick < ticks && world.snapshot().state === 'playing'; tick++) {
+  for (let tick = 0; tick < ticks; tick++) {
+    const curState = world.getState();
+    if (curState === 'won' || curState === 'lost') break;
+
     if (frames[cursor]?.tick === tick) {
       const f = frames[cursor++];
       if (f.move !== undefined) activeInput.move = [f.move[0], f.move[1]];
       if (f.cam_yaw_deg !== undefined) activeInput.cam_yaw_deg = f.cam_yaw_deg;
       if (f.jump !== undefined) activeInput.jump = f.jump;
+      if (f.dash !== undefined) activeInput.dash = f.dash;
       if (f.interact !== undefined) activeInput.interact = f.interact;
       if (f.pulse !== undefined) activeInput.pulse = f.pulse;
-      if (f.dash !== undefined) activeInput.dash = f.dash;
+      if (f.pause !== undefined) activeInput.pause = f.pause;
     }
 
     for (const event of world.step(activeInput)) {
