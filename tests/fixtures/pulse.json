@@ -3,7 +3,7 @@
   "random_shades": false,
   "motes": [],
   "shades": [
-    { "id": "S1", "pos": [5, 0, 0] }
+    { "id": "S1", "pos": [4, 0.8, 0], "state": "chase" }
   ],
   "player": {
     "pos": [0, 0, 0],

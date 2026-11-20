@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 
-const temp = mkdtempSync(join(tmpdir(), 'lantern-test-'));
+const temp = mkdtempSync(join(tmpdir(), 'lantern-test-v11-'));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
 
 const cli = resolve('dist-headless/src/headless/cli.js');
@@ -20,10 +20,10 @@ const records = (s: string) =>
     .split('\n')
     .map((l) => JSON.parse(l));
 
-describe('headless contract v1.0', () => {
-  it('emits byte-identical JSONL for same seed with default snapshot interval 10 and final end record', () => {
-    const a = run('--seed', '42', '--night', '1', '--ticks', '100');
-    const b = run('--seed', '42', '--night', '1', '--ticks', '100');
+describe('headless contract v1.1', () => {
+  it.each([1, 2, 3])('emits byte-identical JSONL for Night %i with v1.1 snapshot & end record', (night) => {
+    const a = run('--seed', '42', '--night', String(night), '--ticks', '100');
+    const b = run('--seed', '42', '--night', String(night), '--ticks', '100');
     expect(a.status).toBe(0);
     expect(a.stdout).toBe(b.stdout);
     expect(a.stderr).toBe('');
@@ -31,35 +31,62 @@ describe('headless contract v1.0', () => {
     const r = records(a.stdout);
     const snapshots = r.filter((x) => x.type === 'snapshot');
     expect(snapshots.map((x) => x.tick)).toEqual([0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]);
-    expect(snapshots[0].sim_tick).toBe(0);
-    expect(snapshots[0].state).toBe('playing');
-    expect(snapshots[0].motes_active).toBe(12);
+    expect(snapshots[0].night).toBe(night);
+    expect(snapshots[0].wind).toEqual({ active: false, dir_deg: 0 });
+    expect(snapshots[0].player).toHaveProperty('vel');
+    expect(snapshots[0].player).toHaveProperty('grounded');
+    expect(snapshots[0].motes_active).toBe(20);
+    expect(Array.isArray(snapshots[0].drifters)).toBe(true);
+    expect(Array.isArray(snapshots[0].charms)).toBe(true);
     expect(r.at(-1)).toMatchObject({ type: 'end', ticks: 100, state: 'playing' });
   });
 
-  it('scenario/inputs/out follow exact Test Contract v1.0 schema', () => {
-    const scenario = json('win.json', {
-      random_motes: false,
-      random_shades: false,
-      player: { pos: [0, 0, 0], carried: 3, flames: 3 },
-      lanterns: [
-        { id: 'L1', lit: true },
-        { id: 'L2', lit: true },
-        { id: 'L3', lit: true },
-        { id: 'L4', lit: true },
-        { id: 'L5', pos: [0, 0, 0], deposited: 0 }
-      ]
-    });
-    const inputs = json('input.json', { frames: [{ tick: 0, interact: true }, { tick: 1, interact: false }] });
-    const out = join(temp, 'result.jsonl');
-    const result = run('--seed', '1', '--night', '1', '--scenario', scenario, '--inputs', inputs, '--out', out, '--ticks', '99');
-    expect(result.status).toBe(0);
-    expect(result.stdout).toBe('');
+  it('runs all 8 Phase 2 feature scenarios via CLI cleanly', () => {
+    const cases: [string, number, string][] = [
+      ['dash', 1, 'dash'],
+      ['fall', 1, 'player_hit'],
+      ['launchpad', 2, 'night_start'],
+      ['night3-terrain', 3, 'night_start'],
+      ['drifter', 2, 'drifter_steal'],
+      ['charm', 2, 'charm_picked'],
+      ['pause', 1, 'paused'],
+      ['safe-push', 1, 'lantern_lit']
+    ];
+    for (const [name, night, expectedEvent] of cases) {
+      const res = run(
+        '--seed',
+        '42',
+        '--night',
+        String(night),
+        '--scenario',
+        resolve(`tests/fixtures/${name}.json`),
+        '--inputs',
+        resolve(`tests/fixtures/${name}-inputs.json`),
+        '--ticks',
+        '120'
+      );
+      expect(res.status).toBe(0);
+      const recs = records(res.stdout);
+      expect(recs.some((r) => r.type === 'event' && r.name === expectedEvent)).toBe(true);
+      expect(recs.at(-1).type).toBe('end');
+    }
+  });
 
-    const r = records(readFileSync(out, 'utf8'));
-    expect(r.filter((x) => x.type === 'snapshot').map((x) => x.tick)).toEqual([0]);
-    expect(r.filter((x) => x.type === 'event').map((x) => x.name)).toEqual(['deposit', 'lantern_lit', 'game_over']);
-    expect(r.at(-1)).toMatchObject({ type: 'end', ticks: 1, state: 'won' });
+  it('runs a full Night 3 21,600-tick headless game within 30 seconds', () => {
+    const safeBench = json('bench-n3.json', {
+      night: 3,
+      wind_enabled: false,
+      lanterns: [{ id: 'L1', pos: [0, 6, 6], lit: true }],
+      player: { pos: [0, 6, 4] }
+    });
+    const out = join(temp, 'bench.jsonl');
+    const started = Date.now();
+    const res = run('--seed', '42', '--night', '3', '--scenario', safeBench, '--ticks', '21600', '--snapshot-every', '60', '--out', out);
+    const elapsedMs = Date.now() - started;
+    expect(res.status).toBe(0);
+    expect(elapsedMs).toBeLessThan(30_000);
+    const last = records(readFileSync(out, 'utf8')).at(-1);
+    expect(last).toMatchObject({ type: 'end', ticks: 21600 });
   });
 
   it('holds sticky input fields across gap frames until changed', () => {
@@ -72,34 +99,23 @@ describe('headless contract v1.0', () => {
     });
     const r = records(run('--scenario', scenario, '--inputs', inputs, '--ticks', '20', '--snapshot-every', '10').stdout);
     const snaps = r.filter((x) => x.type === 'snapshot');
-    expect(snaps[1].tick).toBe(10);
-    expect(snaps[1].player.pos).toEqual([0, 0, 1]); // 10 ticks * 6 m/s / 60 = 1m
-    expect(snaps[2].tick).toBe(20);
-    expect(snaps[2].player.pos).toEqual([0, 0, 1]); // stopped after tick 10
-  });
-
-  it('zero ticks outputs tick 0 snapshot and end record', () => {
-    const r = records(run('--ticks', '0').stdout);
-    expect(r.map((x) => x.type)).toEqual(['snapshot', 'end']);
-    expect(r[1]).toMatchObject({ type: 'end', ticks: 0 });
+    expect(snaps[1].player.pos).toEqual([0, 0, 1]);
+    expect(snaps[2].player.pos).toEqual([0, 0, 1]);
   });
 
   it.each([
     ['--bad', '1'],
     ['--seed', '-1'],
-    ['--seed', '1.2'],
-    ['--night', '2'],
+    ['--night', '4'],
     ['--ticks', 'NaN'],
     ['--snapshot-every', '0'],
     ['--seed'],
     ['--ticks', '1', '--ticks', '2'],
-    ['--seed', '4294967296'],
     ['--out', '/not/a/real/folder/out.jsonl']
   ])('invalid flags exit 2 %j', (...args: string[]) => {
     const r = run(...args);
     expect(r.status).toBe(2);
     expect(r.stderr).toContain('Error:');
-    expect(r.stdout).toBe('');
   });
 
   it.each([

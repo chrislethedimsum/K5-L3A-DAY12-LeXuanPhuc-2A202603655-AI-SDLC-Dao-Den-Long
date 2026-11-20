@@ -5,7 +5,7 @@
   "shades": [],
   "player": {
     "pos": [0, 0, 0],
-    "carried": 3
+    "carried": 10
   },
   "lanterns": [
     { "id": "L1", "lit": true },
