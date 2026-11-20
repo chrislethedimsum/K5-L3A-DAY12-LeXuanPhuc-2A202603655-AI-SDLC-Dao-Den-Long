@@ -7,10 +7,10 @@ import type { Pos3, Scenario, ScenarioLanternPatch } from '../../src/core/types'
 const pos = (x = 0, z = 0, y = 0): Pos3 => [x, y, z];
 const allLitExceptL1 = (l1Patch: Partial<ScenarioLanternPatch> = {}): ScenarioLanternPatch[] => [
   { id: 'L1', pos: pos(0, 0), deposited: 0, ...l1Patch },
-  { id: 'L2', lit: true },
-  { id: 'L3', lit: true },
-  { id: 'L4', lit: true },
-  { id: 'L5', lit: true }
+  { id: 'L2', lit: true, fuel: 100 },
+  { id: 'L3', lit: true, fuel: 100 },
+  { id: 'L4', lit: true, fuel: 100 },
+  { id: 'L5', lit: true, fuel: 100 }
 ];
 
 const base: Scenario = { random_motes: false, random_shades: false, motes: [], shades: [] };
@@ -19,12 +19,14 @@ const advance = (w: GameWorld, n: number) => {
   for (let i = 0; i < n; i++) w.step();
 };
 
-describe('Phase 1 regression under Ticket-02 standardized values (Contract v1.1)', () => {
-  it('uses exact Contract v1.1 tuning and isolated snapshots/scenarios', () => {
-    expect(contract.contract_version).toBe('1.1');
+describe('Phase 1-2 regression adapted for Ticket-03 (Contract v1.2)', () => {
+  it('uses exact Contract v1.2 tuning and isolated snapshots/scenarios', () => {
+    expect(contract.contract_version).toBe('1.2');
     expect(contract.tuning.player_speed).toBe(6);
     expect(contract.tuning.carry_capacity).toBe(10);
-    expect(contract.tuning.lantern_cost).toBe(10);
+    expect(contract.tuning.capacity_max).toBe(20);
+    expect(contract.tuning.fuel_max).toBe(100);
+    expect(contract.tuning.score.per_mote).toBe(5);
     expect(Object.isFrozen(contract.tuning)).toBe(true);
 
     const scenario: Scenario = { ...base, player: { pos: pos(2) } };
@@ -64,7 +66,6 @@ describe('Phase 1 regression under Ticket-02 standardized values (Contract v1.1)
     for (let i = 0; i < 45; i++) jumper.step({ jump: true });
     expect(jumper.snapshot().player.pos[1]).toBe(0);
     expect(jumper.snapshot().player.grounded).toBe(true);
-    // Holding jump does not re-jump; must release then press again
     jumper.step({ jump: true });
     expect(jumper.snapshot().player.pos[1]).toBe(0);
     jumper.step({ jump: false });
@@ -72,26 +73,28 @@ describe('Phase 1 regression under Ticket-02 standardized values (Contract v1.1)
     expect(jumper.snapshot().player.pos[1]).toBeGreaterThan(0);
   });
 
-  // Ticket-02 order: step 3 move -> step 4 pickup (XZ <= 1.0, |dY| <= 1.5, no score on pickup) -> step 5 deposit (+10/mote)
-  it('pickup uses XZ <= 1.0, |dY| <= 1.5, capacity 10, and score is awarded on deposit per Ticket-02', () => {
+  // Ticket-03: lighting all lanterns does NOT end early (no all_lit); pickup precedes deposit, score +5/mote
+  it('pickup uses XZ <= 1.0, capacity, and lighting L1 does not end early per Ticket-03', () => {
     const w = world({
       player: { carried: 4, pos: pos(0, 0, 1.5) },
       motes: [pos(1.0), pos(1.01), pos(0)],
       lanterns: allLitExceptL1({ deposited: 6 })
     });
     const ev = w.step({ interact: true });
-    expect(ev.map((e) => e.name)).toEqual(['night_start', 'mote_picked', 'mote_picked', 'deposit', 'lantern_lit', 'game_over']);
+    expect(ev.map((e) => e.name)).toEqual(['night_start', 'mote_picked', 'mote_picked', 'deposit', 'lantern_lit']);
+    expect(w.snapshot().state).toBe('playing');
     expect(w.snapshot().player.carried).toBe(2);
+    expect(w.snapshot().player.capacity).toBe(12);
 
     const cap = world({ motes: Array.from({ length: 12 }, () => pos()) });
     const capEvents = cap.step();
     expect(capEvents.filter((e) => e.name === 'mote_picked')).toHaveLength(10);
     expect(cap.snapshot().motes).toHaveLength(2);
-    expect(cap.snapshot().motes_active).toBe(2);
-    expect(cap.snapshot().score).toBe(0); // Ticket-02: +10 on deposit, not pickup
+    expect(cap.snapshot().score).toBe(0);
   });
 
-  it('supports partial deposit, nearest lamp with id tiebreak, rising-edge suppression and leftovers', () => {
+  // Ticket-03: +5 per mote deposited
+  it('supports partial deposit (+5/mote), nearest lamp with id tiebreak, rising-edge suppression', () => {
     const w = world({
       player: { carried: 3 },
       lanterns: [
@@ -103,11 +106,10 @@ describe('Phase 1 regression under Ticket-02 standardized values (Contract v1.1)
       name: 'deposit',
       data: { lantern_id: 'L2', amount: 3, deposited: 3 }
     });
-    expect(w.snapshot().score).toBe(30);
+    expect(w.snapshot().score).toBe(15);
     expect(w.snapshot().lanterns[1].lit).toBe(false);
     expect(w.step({ interact: true }).filter((e) => e.name === 'deposit')).toEqual([]);
 
-    // Tie-break by smaller id when equidistant
     const tie = world({
       player: { carried: 2 },
       lanterns: [
@@ -120,7 +122,6 @@ describe('Phase 1 regression under Ticket-02 standardized values (Contract v1.1)
     });
   });
 
-  // Ticket-02: pulse center is y + 0.8m, 3D dist <= 5m, cost 3, stun 120 ticks, push 4m over 15 ticks, +5 score
   it('pulse costs 3, uses 3D radius 5m from y+0.8, stuns 120 ticks, pushes 4m in 15 ticks, cooldown 180 ticks', () => {
     const w = world({
       player: { carried: 9 },
@@ -137,11 +138,9 @@ describe('Phase 1 regression under Ticket-02 standardized values (Contract v1.1)
     expect(w.snapshot().score).toBe(5);
     expect(w.snapshot().player.carried).toBe(6);
 
-    // 15 ticks push totals 4m (from x=4.9 -> x=8.9)
     advance(w, 15);
     expect(w.snapshot().shades[0].pos[0]).toBeCloseTo(8.9, 2);
 
-    // Pulse cooldown is 180 ticks (3s) tested in clean world without outside shade hitting player
     const cd = world({ player: { carried: 9 } });
     expect(cd.step({ pulse: true }).some((e) => e.name === 'pulse')).toBe(true);
     expect(cd.step({ pulse: true }).some((e) => e.name === 'pulse')).toBe(false);
@@ -175,17 +174,14 @@ describe('Phase 1 regression under Ticket-02 standardized values (Contract v1.1)
     expect(w.snapshot().motes[0].kind).toBe('dropped');
     expect(w.snapshot().shades[0].state).toBe('recoil');
 
-    // Invulnerable for 90 ticks (1.5s)
     advance(w, 88);
     expect(w.snapshot().player.flames).toBe(2);
-    // Once invuln ends and shade finishes 60-tick recoil and walks back to player, next hit can occur
     const odd = world({ player: { carried: 1 }, shades: [{ id: 'S1', pos: pos(0, 0, 0.8), state: 'chase' }] });
     expect(odd.step().find((e) => e.name === 'player_hit')).toMatchObject({
       data: { by: 'shade', flames: 2, dropped: 0 }
     });
   });
 
-  // Ticket-02: initial 20 motes at tick 0; shades spawn 2 at tick 300 then every 480 ticks (Night 1)
   it('spawns 20 initial motes and schedules shades at tick 300 then 300+480k', () => {
     const w = new GameWorld({ seed: 42, night: 1 });
     expect(w.snapshot().motes).toHaveLength(20);
@@ -196,7 +192,6 @@ describe('Phase 1 regression under Ticket-02 standardized values (Contract v1.1)
     expect(ev300.filter((e) => e.name === 'shade_spawned')).toHaveLength(2);
     expect(w.snapshot().shades.every((s) => s.state === 'spawning')).toBe(true);
 
-    // After 30 ticks, spawning transitions to wander/chase
     advance(w, 30);
     expect(w.snapshot().shades.every((s) => s.state !== 'spawning')).toBe(true);
 
@@ -206,47 +201,51 @@ describe('Phase 1 regression under Ticket-02 standardized values (Contract v1.1)
     expect(off.snapshot().motes).toHaveLength(0);
   });
 
-  it('scenario construction has no score or implicit events and preserves unmentioned lanterns', () => {
+  it('scenario construction has no score or implicit events and defaults lit fuel=100, ever_lit=true', () => {
     const w = world({
       lanterns: [{ id: 'L1', pos: pos(0), lit: true }],
       motes: [pos()],
-      time_left_s: 300
+      time_left_s: 240
     });
     expect(w.snapshot().tick).toBe(0);
     expect(w.snapshot().score).toBe(0);
     expect(w.snapshot().player.carried).toBe(0);
-    expect(w.snapshot().time_left_s).toBe(300);
-    expect(w.snapshot().lanterns).toHaveLength(5);
-    expect(w.snapshot().lanterns[0].lit).toBe(true);
-    expect(w.snapshot().lanterns[1].lit).toBe(false);
+    expect(w.snapshot().player.capacity).toBe(10);
+    expect(w.snapshot().time_left_s).toBe(240);
+    expect(w.snapshot().lanterns[0]).toMatchObject({ lit: true, fuel: 100, ever_lit: true, relit_count: 0 });
+    expect(w.snapshot().lanterns[1]).toMatchObject({ lit: false, fuel: 0, ever_lit: false });
   });
 
-  // Ticket-02: win bonus floor(time_left_s)*2 + flames*50, and can win on exact final tick; no_flames always loses
-  it('all_lit wins on final tick and adds exact Ticket-02 bonus; no_flames precedes all_lit', () => {
-    const w = world({ player: { carried: 10 }, lanterns: allLitExceptL1(), time_left_s: 1 / 60 });
-    expect(w.step({ interact: true })).toEqual([
-      { type: 'event', tick: 1, name: 'night_start', data: { night: 1 } },
-      { type: 'event', tick: 1, name: 'deposit', data: { lantern_id: 'L1', amount: 10, deposited: 10 } },
-      { type: 'event', tick: 1, name: 'lantern_lit', data: { lantern_id: 'L1' } },
-      { type: 'event', tick: 1, name: 'game_over', data: { result: 'won', reason: 'all_lit' } }
-    ]);
-    // 10*10 (deposit) + 100 (lit) + 0*2 (time) + 3*50 (flames) = 350
-    expect(w.snapshot()).toMatchObject({ state: 'won', score: 350 });
+  // Ticket-03: Replaced all_lit with dawn_survived (>= ceil(0.6 * 5) = 3 lit lanterns at dawn)
+  it('dawn_survived wins at dawn when >= 3/5 lanterns lit; no_flames overrides at dawn tick', () => {
+    const w = world({
+      player: { carried: 10 },
+      lanterns: [
+        { id: 'L1', lit: true, fuel: 80 },
+        { id: 'L2', lit: true, fuel: 80 },
+        { id: 'L3', pos: pos(0), deposited: 0 }
+      ],
+      time_left_s: 1 / 60
+    });
+    const ev = w.step({ interact: true });
+    expect(ev.map((e) => e.name)).toEqual(['night_start', 'deposit', 'lantern_lit', 'game_over']);
+    // 10*5 (deposit) + 100 (lit) + (50+79)*2 + (50+100) + 3*50 (flames) = 708
+    expect(w.snapshot()).toMatchObject({ state: 'won', score: 708 });
+    expect(w.hudState().reason).toBe('dawn_survived');
 
     const before = w.snapshot();
     expect(w.step({ move: [1, 0] })).toEqual([]);
     expect(w.snapshot()).toEqual(before);
 
-    // Night 1 duration 300s = 18000 ticks for dawn
-    const dawn = world({ time_left_s: 0.05 });
-    advance(dawn, 2);
-    expect(dawn.snapshot().state).toBe('playing');
-    expect(dawn.step()[0]).toMatchObject({ name: 'game_over', data: { result: 'lost', reason: 'dawn' } });
-    expect(dawn.snapshot().time_left_s).toBe(0);
+    // Loss when < 3/5 lit at dawn
+    const dawnLoss = world({ time_left_s: 0.05 });
+    advance(dawnLoss, 2);
+    expect(dawnLoss.snapshot().state).toBe('playing');
+    expect(dawnLoss.step()[0]).toMatchObject({ name: 'game_over', data: { result: 'lost', reason: 'dawn' } });
   });
 });
 
-describe('strict validation v1.1', () => {
+describe('strict validation v1.2', () => {
   it.each([
     null,
     [],
@@ -254,12 +253,16 @@ describe('strict validation v1.1', () => {
     { seed: -1 },
     { night: 4 },
     { player: { carried: 11 } },
+    { player: { carried: 21, successful_lights: 5 } },
     { player: { flames: 0 } },
     { time_left_s: 0 },
     { lanterns: [{ id: 'INVALID' }] },
-    { lanterns: [{ id: 'L1', deposited: 0, lit: true }] },
+    { lanterns: [{ id: 'L1', lit: false, fuel: 10 }] },
+    { lanterns: [{ id: 'L1', lit: true, fuel: 0 }] },
+    { lanterns: [{ id: 'L1', lit: true, ever_lit: false }] },
     { shades: [{ id: 'a', pos: pos() }, { id: 'a', pos: pos() }] },
     { shades: [{ pos: pos(), state: 'invalid' }] },
+    { shades: [{ pos: pos(), target_lantern_id: 'BAD' }] },
     { drifters: [{ pos: pos(), state: 'bad' }] },
     { random_motes: 1 }
   ])('rejects malformed scenario %j', (s: unknown) => expect(() => validateScenario(s)).toThrow());

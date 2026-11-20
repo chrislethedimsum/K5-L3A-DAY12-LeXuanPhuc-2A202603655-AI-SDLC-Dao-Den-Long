@@ -4,15 +4,15 @@ import type { Pos3 } from '../../src/core/types';
 
 const p = (x: number, y = 0, z = 0): Pos3 => [x, y, z];
 
-it('resolves overlapping lit 6m safe zones together and protects player', () => {
+it('resolves overlapping lit 6m safe zones together when fuel >= 30 and protects player', () => {
   const w = new GameWorld({
     scenario: {
       random_motes: false,
       random_shades: false,
       player: { pos: p(3) },
       lanterns: [
-        { id: 'L1', pos: p(0), lit: true },
-        { id: 'L2', pos: p(8), lit: true },
+        { id: 'L1', pos: p(0), lit: true, fuel: 80 },
+        { id: 'L2', pos: p(8), lit: true, fuel: 80 },
         { id: 'L3', pos: p(20), lit: false }
       ],
       shades: [{ id: 'S1', pos: p(4, 0.8), state: 'chase' }]
@@ -32,7 +32,7 @@ it('keeps shade on 40m island when lantern protection overlaps shore', () => {
       random_motes: false,
       random_shades: false,
       lanterns: [
-        { id: 'L1', pos: p(38), lit: true },
+        { id: 'L1', pos: p(38), lit: true, fuel: 80 },
         { id: 'L2', pos: p(0), lit: false }
       ],
       shades: [{ id: 'S1', pos: p(39, 0.8), state: 'stunned', state_ticks_left: 60 }]

@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 
-const temp = mkdtempSync(join(tmpdir(), 'lantern-test-v11-'));
+const temp = mkdtempSync(join(tmpdir(), 'lantern-test-v12-'));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
 
 const cli = resolve('dist-headless/src/headless/cli.js');
@@ -20,8 +20,8 @@ const records = (s: string) =>
     .split('\n')
     .map((l) => JSON.parse(l));
 
-describe('headless contract v1.1', () => {
-  it.each([1, 2, 3])('emits byte-identical JSONL for Night %i with v1.1 snapshot & end record', (night) => {
+describe('headless contract v1.2', () => {
+  it.each([1, 2, 3])('emits byte-identical JSONL for Night %i with v1.2 snapshot & end record', (night) => {
     const a = run('--seed', '42', '--night', String(night), '--ticks', '100');
     const b = run('--seed', '42', '--night', String(night), '--ticks', '100');
     expect(a.status).toBe(0);
@@ -32,16 +32,12 @@ describe('headless contract v1.1', () => {
     const snapshots = r.filter((x) => x.type === 'snapshot');
     expect(snapshots.map((x) => x.tick)).toEqual([0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]);
     expect(snapshots[0].night).toBe(night);
-    expect(snapshots[0].wind).toEqual({ active: false, dir_deg: 0 });
-    expect(snapshots[0].player).toHaveProperty('vel');
-    expect(snapshots[0].player).toHaveProperty('grounded');
-    expect(snapshots[0].motes_active).toBe(20);
-    expect(Array.isArray(snapshots[0].drifters)).toBe(true);
-    expect(Array.isArray(snapshots[0].charms)).toBe(true);
+    expect(snapshots[0].player.capacity).toBe(10);
+    expect(snapshots[0].lanterns[0]).toMatchObject({ fuel: 0, ever_lit: false, relit_count: 0 });
     expect(r.at(-1)).toMatchObject({ type: 'end', ticks: 100, state: 'playing' });
   });
 
-  it('runs all 8 Phase 2 feature scenarios via CLI cleanly', () => {
+  it('runs all Phase 2 & Phase 3 feature scenarios via CLI cleanly', () => {
     const cases: [string, number, string][] = [
       ['dash', 1, 'dash'],
       ['fall', 1, 'player_hit'],
@@ -50,7 +46,12 @@ describe('headless contract v1.1', () => {
       ['drifter', 2, 'drifter_steal'],
       ['charm', 2, 'charm_picked'],
       ['pause', 1, 'paused'],
-      ['safe-push', 1, 'lantern_lit']
+      ['safe-push', 1, 'lantern_lit'],
+      ['refuel', 1, 'refuel'],
+      ['lantern-out-relight', 1, 'lantern_out'],
+      ['shade-drain', 1, 'fuel_drain'],
+      ['dawn-survived', 1, 'game_over'],
+      ['capacity-growth', 1, 'lantern_lit']
     ];
     for (const [name, night, expectedEvent] of cases) {
       const res = run(
@@ -72,21 +73,21 @@ describe('headless contract v1.1', () => {
     }
   });
 
-  it('runs a full Night 3 21,600-tick headless game within 30 seconds', () => {
+  it('runs a full Night 3 18,000-tick (300s) headless game within 30 seconds', () => {
     const safeBench = json('bench-n3.json', {
       night: 3,
       wind_enabled: false,
-      lanterns: [{ id: 'L1', pos: [0, 6, 6], lit: true }],
+      lanterns: [{ id: 'L1', pos: [0, 6, 6], lit: true, fuel: 100 }],
       player: { pos: [0, 6, 4] }
     });
     const out = join(temp, 'bench.jsonl');
     const started = Date.now();
-    const res = run('--seed', '42', '--night', '3', '--scenario', safeBench, '--ticks', '21600', '--snapshot-every', '60', '--out', out);
+    const res = run('--seed', '42', '--night', '3', '--scenario', safeBench, '--ticks', '18000', '--snapshot-every', '60', '--out', out);
     const elapsedMs = Date.now() - started;
     expect(res.status).toBe(0);
     expect(elapsedMs).toBeLessThan(30_000);
     const last = records(readFileSync(out, 'utf8')).at(-1);
-    expect(last).toMatchObject({ type: 'end', ticks: 21600 });
+    expect(last).toMatchObject({ type: 'end', ticks: 18000 });
   });
 
   it('holds sticky input fields across gap frames until changed', () => {

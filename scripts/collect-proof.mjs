@@ -49,7 +49,12 @@ const scenarios = [
   ['drifter', 2, '120'],
   ['charm', 2, '120'],
   ['pause', 1, '120'],
-  ['safe-push', 1, '120']
+  ['safe-push', 1, '120'],
+  ['refuel', 1, '120'],
+  ['lantern-out-relight', 1, '120'],
+  ['shade-drain', 1, '120'],
+  ['dawn-survived', 1, '120'],
+  ['capacity-growth', 1, '120']
 ];
 
 const coverage = new Set();
@@ -80,23 +85,24 @@ for (const [name, night, ticks] of scenarios) {
 }
 
 const expected = [
-  'mote_picked', 'deposit', 'lantern_lit', 'pulse', 'player_hit', 'shade_spawned', 'game_over',
+  'mote_picked', 'deposit', 'lantern_lit', 'refuel', 'lantern_out', 'fuel_drain',
+  'pulse', 'player_hit', 'shade_spawned', 'game_over',
   'dash', 'charm_picked', 'drifter_steal', 'drifter_drop', 'night_start', 'paused', 'resumed'
 ];
 const missing = expected.filter((e) => !coverage.has(e));
 writeFileSync(
   resolve(dir, 'event-coverage.log'),
-  `${missing.length ? 'FAIL missing ' + missing.join(',') : 'PASS all 14 Test Contract v1.1 events'}\n${[...coverage].join('\n')}\n`
+  `${missing.length ? 'FAIL missing ' + missing.join(',') : 'PASS all 17 Test Contract v1.2 events'}\n${[...coverage].join('\n')}\n`
 );
 results.push({ name: 'event-coverage', status: missing.length ? 1 : 0 });
 
-// Night 3 21,600-tick benchmark (must be <= 30,000 ms)
+// Night 3 18,000-tick (300s) benchmark (must be <= 30,000 ms)
 const benchScenario = resolve('docs/proof/bench-n3-scenario.json');
-writeFileSync(benchScenario, JSON.stringify({ night: 3, wind_enabled: false, lanterns: [{ id: 'L1', pos: [0, 6, 6], lit: true }], player: { pos: [0, 6, 4] } }));
-const bench = run('perf-headless', process.execPath, [cli, '--seed', '42', '--night', '3', '--scenario', benchScenario, '--ticks', '21600', '--snapshot-every', '60', '--out', 'docs/proof/perf-headless.jsonl']);
+writeFileSync(benchScenario, JSON.stringify({ night: 3, wind_enabled: false, lanterns: [{ id: 'L1', pos: [0, 6, 6], lit: true, fuel: 100 }], player: { pos: [0, 6, 4] } }));
+const bench = run('perf-headless', process.execPath, [cli, '--seed', '42', '--night', '3', '--scenario', benchScenario, '--ticks', '18000', '--snapshot-every', '60', '--out', 'docs/proof/perf-headless.jsonl']);
 const benchEntry = results.at(-1);
-writeFileSync(resolve(dir, 'perf-headless.log'), `ticks=21600\nnight=3\nelapsed_ms=${benchEntry.elapsed_ms}\nthreshold_ms=30000\npassed=${bench.status === 0 && benchEntry.elapsed_ms <= 30000}\n`);
+writeFileSync(resolve(dir, 'perf-headless.log'), `ticks=18000\nnight=3\nelapsed_ms=${benchEntry.elapsed_ms}\nthreshold_ms=30000\npassed=${bench.status === 0 && benchEntry.elapsed_ms <= 30000}\n`);
 
-writeFileSync(resolve(dir, 'run-summary.json'), JSON.stringify({ mode: 'phase-2-full', results }, null, 2) + '\n');
+writeFileSync(resolve(dir, 'run-summary.json'), JSON.stringify({ mode: 'phase-3-full', results }, null, 2) + '\n');
 if (results.some((r) => r.status !== 0)) process.exitCode = 1;
 console.log(JSON.stringify(results, null, 2));

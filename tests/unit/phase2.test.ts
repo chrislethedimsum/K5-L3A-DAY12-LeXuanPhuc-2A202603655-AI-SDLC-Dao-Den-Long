@@ -2,18 +2,19 @@ import { describe, it, expect } from 'vitest';
 import { GameWorld } from '../../src/core/simulation';
 import { getGroundHeight, NIGHT_MAPS } from '../../src/core/maps';
 
-describe('Phase 2 standardized maps, mechanics & Contract v1.1', () => {
-  it('defines exact lantern counts and durations for Nights 1, 2, 3', () => {
+describe('Phase 2 standardized maps, mechanics & Contract v1.2', () => {
+  // Ticket-03 updated durations: 240 / 270 / 300s
+  it('defines exact lantern counts and Ticket-03 durations for Nights 1, 2, 3', () => {
     const n1 = new GameWorld({ night: 1 });
     const n2 = new GameWorld({ night: 2 });
     const n3 = new GameWorld({ night: 3 });
     expect(n1.snapshot().lanterns).toHaveLength(5);
-    expect(n1.snapshot().time_left_s).toBe(300);
+    expect(n1.snapshot().time_left_s).toBe(240);
     expect(n2.snapshot().lanterns).toHaveLength(6);
-    expect(n2.snapshot().time_left_s).toBe(330);
+    expect(n2.snapshot().time_left_s).toBe(270);
     expect(n2.snapshot().charms).toHaveLength(1);
     expect(n3.snapshot().lanterns).toHaveLength(7);
-    expect(n3.snapshot().time_left_s).toBe(360);
+    expect(n3.snapshot().time_left_s).toBe(300);
     expect(n3.snapshot().charms).toHaveLength(2);
     expect(NIGHT_MAPS[3].moteSpawns).toHaveLength(30);
   });
@@ -22,14 +23,12 @@ describe('Phase 2 standardized maps, mechanics & Contract v1.1', () => {
     const w = new GameWorld({
       scenario: { random_motes: false, random_shades: false, motes: [], shades: [] }
     });
-    // Stationary dash uses default facing [0, 1] (+Z)
     const ev = w.step({ dash: true });
     expect(ev.some((e) => e.name === 'dash')).toBe(true);
     expect(w.snapshot().player.dash_cd_s).toBe(1.5);
     for (let i = 0; i < 11; i++) w.step({ dash: true });
-    expect(w.snapshot().player.pos[2]).toBeCloseTo(2.8, 2); // 14 * 0.2 = 2.8m
+    expect(w.snapshot().player.pos[2]).toBeCloseTo(2.8, 2);
 
-    // Airborne dash holds Y constant
     const air = new GameWorld({
       scenario: { random_motes: false, random_shades: false, motes: [], shades: [] }
     });
@@ -54,7 +53,7 @@ describe('Phase 2 standardized maps, mechanics & Contract v1.1', () => {
       const evs = w.step(hitEvent ? { move: [0, 0] } : { move: [1, 0] });
       const found = evs.find((e) => e.name === 'player_hit');
       if (found) {
-        expect(hitEvent).toBeUndefined(); // exactly once per fall
+        expect(hitEvent).toBeUndefined();
         hitEvent = found;
       }
       if (hitEvent && !w.hudState().respawning) break;
@@ -64,7 +63,6 @@ describe('Phase 2 standardized maps, mechanics & Contract v1.1', () => {
     expect(w.snapshot().player.carried).toBe(0);
     expect(w.snapshot().player.invuln).toBe(true);
 
-    // Last flame fall ends immediately with no_flames
     const fatal = new GameWorld({
       scenario: {
         random_motes: false,
@@ -105,7 +103,6 @@ describe('Phase 2 standardized maps, mechanics & Contract v1.1', () => {
   });
 
   it('Night 3 ramps climb to Tier 1, cliffs block direct climb, bell tower blocks center, and launch pad reaches Tier 2', () => {
-    // 30-deg ramp climbs smoothly to Y=3
     const ramp = new GameWorld({
       night: 3,
       scenario: {
@@ -121,7 +118,6 @@ describe('Phase 2 standardized maps, mechanics & Contract v1.1', () => {
     for (let i = 0; i < 65; i++) ramp.step({ move: [-0.866, -0.5] });
     expect(ramp.snapshot().player.pos[1]).toBeCloseTo(3, 1);
 
-    // Direct vertical cliff at (0, 0, 24.2) -> (0, 0, 23.5) blocks entry onto Tier 1
     const cliff = new GameWorld({
       night: 3,
       scenario: {
@@ -137,7 +133,6 @@ describe('Phase 2 standardized maps, mechanics & Contract v1.1', () => {
     cliff.step({ move: [0, -1] });
     expect(cliff.snapshot().player.pos[2]).toBeGreaterThan(24);
 
-    // Night 3 launch pad at (0, 3, 13) lands on Tier 2 (Y=6, r<=8) outside Bell Tower (r>=2)
     const pad = new GameWorld({
       night: 3,
       scenario: {
@@ -165,7 +160,7 @@ describe('Phase 2 standardized maps, mechanics & Contract v1.1', () => {
         motes: [],
         shades: [],
         player: { pos: [0, 0, 0], carried: 6, invuln_ticks: 90 },
-        lanterns: [{ id: 'L1', pos: [0, 0, 0], lit: true }],
+        lanterns: [{ id: 'L1', pos: [0, 0, 0], lit: true, fuel: 100 }],
         drifters: [{ id: 'D1', pos: [0.8, 0, 0], state: 'chase' }]
       }
     });
@@ -227,7 +222,7 @@ describe('Phase 2 standardized maps, mechanics & Contract v1.1', () => {
     expect(pausedSnap.state).toBe('paused');
     expect(pausedSnap.tick).toBe(11);
     expect(pausedSnap.sim_tick).toBe(0);
-    expect(pausedSnap.time_left_s).toBe(300);
+    expect(pausedSnap.time_left_s).toBe(240);
     expect(pausedSnap.player.pulse_cd_s).toBe(2);
 
     const evResume = w.step({ pause: true });

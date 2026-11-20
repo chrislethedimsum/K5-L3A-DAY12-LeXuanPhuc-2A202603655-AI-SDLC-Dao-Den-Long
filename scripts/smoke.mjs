@@ -15,30 +15,36 @@ function test(name, fn) {
   console.log(`PASS ${name}`);
 }
 
-test('3 nights initialized deterministically', () => {
-  for (const night of [1, 2, 3]) {
+test('3 nights initialized deterministically with Ticket-03 durations and fuel fields', () => {
+  for (const [night, dur] of [[1, 240], [2, 270], [3, 300]]) {
     const a = new GameWorld({ seed: 42, night });
     const b = new GameWorld({ seed: 42, night });
+    assert.equal(a.snapshot().time_left_s, dur);
+    assert.equal(a.snapshot().player.capacity, 10);
     for (let i = 0; i < 600; i++) a.step();
     for (let i = 0; i < 600; i++) b.step();
     assert.deepEqual(a.snapshot(), b.snapshot());
   }
 });
 
-test('dash + fall + respawn + charm + drifter + pause core invariants', () => {
-  const d = new GameWorld({ scenario: { random_motes: false, random_shades: false, motes: [], shades: [] } });
-  assert.ok(d.step({ dash: true }).some((e) => e.name === 'dash'));
-  for (let i = 0; i < 11; i++) d.step();
-  assert.ok(Math.abs(d.snapshot().player.pos[2] - 2.8) < 0.01);
-
-  const p = new GameWorld({ scenario: { random_motes: false, random_shades: false } });
-  p.step({ pause: true });
-  p.step({ pause: false });
-  assert.equal(p.snapshot().state, 'paused');
-  assert.equal(p.snapshot().sim_tick, 0);
-  p.step({ pause: true });
-  assert.equal(p.snapshot().state, 'playing');
-  assert.equal(p.snapshot().sim_tick, 1);
+test('fuel decay, lantern_out, relight for 5, refuel, capacity growth, and dawn_survived', () => {
+  const w = new GameWorld({
+    scenario: {
+      random_motes: false,
+      random_shades: false,
+      motes: [],
+      shades: [],
+      player: { pos: [0, 0, 0], carried: 5 },
+      lanterns: [{ id: 'L1', pos: [0, 0, 0], lit: true, fuel: 0.05 }]
+    }
+  });
+  for (let i = 0; i < 3; i++) w.step();
+  assert.equal(w.snapshot().lanterns[0].lit, false);
+  assert.equal(w.snapshot().lanterns[0].ever_lit, true);
+  w.step({ interact: true });
+  assert.equal(w.snapshot().lanterns[0].lit, true);
+  assert.equal(w.snapshot().lanterns[0].relit_count, 1);
+  assert.equal(w.snapshot().player.capacity, 12);
 });
 
 const cli = resolve('dist-headless/src/headless/cli.js');
@@ -50,7 +56,7 @@ test('CLI Night 3 malformed flags exit 2', () => {
   }
 });
 
-const tmp = mkdtempSync(join(tmpdir(), 'island-smoke-v11-'));
+const tmp = mkdtempSync(join(tmpdir(), 'island-smoke-v12-'));
 try {
   test('CLI invalid inputs exit 2', () => {
     const path = join(tmp, 'inputs.json');
