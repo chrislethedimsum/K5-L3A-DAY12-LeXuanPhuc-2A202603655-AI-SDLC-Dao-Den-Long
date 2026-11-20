@@ -143,8 +143,8 @@ export const NIGHT_MAPS: Record<NightNumber, NightMapConfig> = {
     subtitle: 'Đêm 3 · Ba tầng tháp cổ',
     elderLine: '“Gió đêm đang nổi lên quanh tháp chuông. Thắp đủ bảy ngọn đèn để đón bình minh!”',
     durationS: 360,
-    spawnPos: [0, 0, 0],
-    spawnFacing: [0, 1],
+    spawnPos: [0, 0, 32],
+    spawnFacing: [0, -1],
     lanterns: [
       { id: 'L1', pos: [0, 6, 6] },
       { id: 'L2', pos: [18, 3, 10] },
