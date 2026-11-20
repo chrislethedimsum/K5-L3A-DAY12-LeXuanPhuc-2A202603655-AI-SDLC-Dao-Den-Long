@@ -1,2 +1,2 @@
-$ /opt/homebrew/Cellar/node/26.13.1_2/bin/node dist-headless/src/headless/cli.js --seed 42 --night 1 --scenario tests/fixtures/spawn.json --inputs tests/fixtures/spawn-inputs.json --ticks 2700 --out docs/proof/spawn.jsonl
-exit=0
+$ /opt/homebrew/Cellar/node/26.13.1_2/bin/node dist-headless/src/headless/cli.js --seed 42 --night 1 --scenario tests/fixtures/spawn.json --inputs tests/fixtures/spawn-inputs.json --ticks 900 --out docs/proof/spawn.jsonl
+exit=0 elapsed_ms=59

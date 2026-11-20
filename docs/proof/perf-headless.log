@@ -1,0 +1,5 @@
+ticks=21600
+night=3
+elapsed_ms=149
+threshold_ms=30000
+passed=true

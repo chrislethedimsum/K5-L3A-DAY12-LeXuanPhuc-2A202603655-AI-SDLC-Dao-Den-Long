@@ -1,2 +1,0 @@
-$ /opt/homebrew/Cellar/node/26.13.1_2/bin/node dist-headless/src/headless/cli.js --seed 42 --night 1 --ticks 1200 --snapshot-every 10 --out docs/proof/seed42-a.jsonl
-exit=0

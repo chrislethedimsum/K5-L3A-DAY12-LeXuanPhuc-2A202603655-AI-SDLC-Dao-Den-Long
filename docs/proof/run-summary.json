@@ -1,57 +1,141 @@
 {
-  "mode": "full",
+  "mode": "phase-2-full",
   "results": [
     {
       "name": "tests",
-      "status": 0
+      "status": 0,
+      "elapsed_ms": 2676
     },
     {
       "name": "browser-build",
-      "status": 0
+      "status": 0,
+      "elapsed_ms": 1861
     },
     {
       "name": "smoke",
+      "status": 0,
+      "elapsed_ms": 255
+    },
+    {
+      "name": "night1-a",
+      "status": 0,
+      "elapsed_ms": 60
+    },
+    {
+      "name": "night1-b",
+      "status": 0,
+      "elapsed_ms": 61
+    },
+    {
+      "name": "determinism-night1",
       "status": 0
     },
     {
-      "name": "seed42-a",
+      "name": "night2-a",
+      "status": 0,
+      "elapsed_ms": 61
+    },
+    {
+      "name": "night2-b",
+      "status": 0,
+      "elapsed_ms": 60
+    },
+    {
+      "name": "determinism-night2",
       "status": 0
     },
     {
-      "name": "seed42-b",
-      "status": 0
+      "name": "night3-a",
+      "status": 0,
+      "elapsed_ms": 62
     },
     {
-      "name": "determinism",
+      "name": "night3-b",
+      "status": 0,
+      "elapsed_ms": 62
+    },
+    {
+      "name": "determinism-night3",
       "status": 0
     },
     {
       "name": "scenario-win",
-      "status": 0
+      "status": 0,
+      "elapsed_ms": 47
     },
     {
       "name": "scenario-dawn",
-      "status": 0
+      "status": 0,
+      "elapsed_ms": 46
     },
     {
       "name": "scenario-hit",
-      "status": 0
+      "status": 0,
+      "elapsed_ms": 47
     },
     {
       "name": "scenario-pulse",
-      "status": 0
+      "status": 0,
+      "elapsed_ms": 47
     },
     {
       "name": "scenario-spawn",
-      "status": 0
+      "status": 0,
+      "elapsed_ms": 59
     },
     {
       "name": "scenario-pickup",
-      "status": 0
+      "status": 0,
+      "elapsed_ms": 51
+    },
+    {
+      "name": "scenario-dash",
+      "status": 0,
+      "elapsed_ms": 47
+    },
+    {
+      "name": "scenario-fall",
+      "status": 0,
+      "elapsed_ms": 54
+    },
+    {
+      "name": "scenario-launchpad",
+      "status": 0,
+      "elapsed_ms": 48
+    },
+    {
+      "name": "scenario-night3-terrain",
+      "status": 0,
+      "elapsed_ms": 48
+    },
+    {
+      "name": "scenario-drifter",
+      "status": 0,
+      "elapsed_ms": 48
+    },
+    {
+      "name": "scenario-charm",
+      "status": 0,
+      "elapsed_ms": 47
+    },
+    {
+      "name": "scenario-pause",
+      "status": 0,
+      "elapsed_ms": 49
+    },
+    {
+      "name": "scenario-safe-push",
+      "status": 0,
+      "elapsed_ms": 47
     },
     {
       "name": "event-coverage",
       "status": 0
+    },
+    {
+      "name": "perf-headless",
+      "status": 0,
+      "elapsed_ms": 149
     }
   ]
 }

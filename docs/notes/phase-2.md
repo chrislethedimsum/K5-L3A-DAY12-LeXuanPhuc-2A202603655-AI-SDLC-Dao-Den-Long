@@ -40,5 +40,16 @@
 8. **Bảng màu chuẩn & Ánh sáng:**
    - Dùng đúng mã HEX chuẩn (±10% RGB) trong [scene.ts](../../src/client/scene.ts) và [style.css](../../src/client/style.css); ánh sáng môi trường `0.15 + 0.55 × (đèn sáng / tổng đèn)`.
 
-## 4. Nhật ký sử dụng AI, Lỗi phát hiện & Token (Cập nhật sau kiểm chứng)
-*(Sẽ cập nhật số liệu thực tế và kết quả đánh giá sau khi hoàn tất Commit 6.)*
+### Đêm 3 — Giả định điểm xuất phát
+- Vì tâm `(0, 0)` ở Đêm 3 là Tầng 2 (`Y=6`) và Tháp chuông (`r < 2`), điểm xuất phát (và hồi sinh) mặc định của Đêm 3 được đặt tại `(0, 0, 32)` trên Tầng 0 (`Y=0`, quay mặt `-Z` hướng về hai dốc lên Tầng 1).
+
+## 4. Nhật ký sử dụng AI, Lỗi phát hiện & Token
+
+- **Các lỗi đã phát hiện & cách khắc phục:**
+  1. *Spawn mặc định Đêm 3 đặt ở `(0, 0, 0)`:* Phát hiện khi chạy benchmark Đêm 3 (`21,600` ticks) — `(0, 0)` trên Đêm 3 nằm trong Tháp chuông (`r < 2`) trên Tầng 2 (`Y=6`) khiến player rơi liên tục khi hồi sinh. Đã chuyển spawn Đêm 3 ra `(0, 0, 32)` trên Tầng 0 thoáng đãng hướng về 2 dốc `30°`/`150°`.
+  2. *Lỗi rising-edge nút Tiếp tục sau khi Pause trên trình duyệt (`src/client/main.ts`):* Phát hiện nhờ kiểm thử thực tế trên Chrome (không thể phát hiện chỉ bằng unit test headless!). Khi gọi `world.step({ pause: true })` để tạm dừng, `lastPause` bị giữ ở `true`, nên khi người chơi bấm `"Tiếp tục"` và gọi `world.step({ pause: true })` lần nữa, `!!input.pause && !this.lastPause` trả về `false` khiến simulation vẫn đóng băng dù modal đã đóng. Đã sửa bằng cách xả `{ pause: false }` ngay sau khi tạm dừng và trước khi tiếp tục trong `pauseGame()`/`resumeGame()`, sau đó kiểm chứng lại pass 100% trên Chrome ở cả Đêm 1 (`P`) và Đêm 2 (`Esc`).
+  3. *Hiệu năng headless `cli.ts`:* Gọi `world.snapshot()` mỗi tick để kiểm tra `.state` sẽ clone mảng không cần thiết 21.600 lần. Đã thêm `world.getState()` O(1) giúp chạy Đêm 3 `21,600` tick chỉ mất **~149 ms** (so với ngưỡng 30.000 ms).
+  4. *Test cooldown/fall lệch vài tick trong unit test:* Đã sửa assertion khớp đúng tick bước của 12-step pipeline (`dash` 90 tick, `fall` ~62 tick rơi + 60 tick chờ hồi sinh).
+- **Ước tính token & cách tiết kiệm:**
+  - Phiên Phase 2 ước tính sử dụng khoảng **~70k–90k tokens** (lên plan, viết `maps.ts` + `simulation.ts` v1.1, bộ test & 14 fixtures, giao diện 3D 3 Đêm + Web Audio + HUD, và 2 lượt kiểm thử browser Chrome).
+  - *Cách tiết kiệm:* Tái sử dụng trực tiếp core `GameWorld` + `Mulberry32` từ Phase 1, viết script `collect-proof.mjs` tự động chạy cả 28 checks trong 1 lần gọi (~4s), và dùng lại subagent browser đang mở để test lại riêng phần Pause/Resume sau khi vá lỗi.

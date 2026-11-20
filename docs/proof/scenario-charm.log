@@ -1,0 +1,2 @@
+$ /opt/homebrew/Cellar/node/26.13.1_2/bin/node dist-headless/src/headless/cli.js --seed 42 --night 2 --scenario tests/fixtures/charm.json --inputs tests/fixtures/charm-inputs.json --ticks 120 --out docs/proof/charm.jsonl
+exit=0 elapsed_ms=47

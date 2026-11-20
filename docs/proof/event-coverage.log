@@ -1,4 +1,5 @@
-PASS all 7 Test Contract v1.0 events
+PASS all 14 Test Contract v1.1 events
+night_start
 deposit
 lantern_lit
 game_over
@@ -6,3 +7,9 @@ player_hit
 pulse
 shade_spawned
 mote_picked
+dash
+drifter_steal
+drifter_drop
+charm_picked
+paused
+resumed
