@@ -2,8 +2,16 @@ import raw from '../../game.contract.json';
 import type { Tuning } from './types';
 
 function validate(): void {
-  if (raw.contract_version !== '1.2' || !raw.team || !raw.build_cmd || !raw.run_cmd || !raw.headless_cmd) {
-    throw new Error('Invalid contract v1.2 metadata');
+  if (
+    raw.contract_version !== '1.3' ||
+    !raw.team ||
+    !raw.build_cmd ||
+    !raw.run_cmd ||
+    !raw.headless_cmd ||
+    !raw.bench_cmd ||
+    !raw.soak_cmd
+  ) {
+    throw new Error('Invalid contract v1.3 metadata');
   }
   for (const [key, value] of Object.entries(raw.tuning)) {
     if (key === 'score') {

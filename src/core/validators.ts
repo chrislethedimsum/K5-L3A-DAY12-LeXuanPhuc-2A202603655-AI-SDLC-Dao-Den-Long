@@ -34,18 +34,35 @@ function pos3(v: unknown, p: string): Pos3 {
 }
 
 export function validateInputFrame(v: unknown, requiredTick = false): asserts v is InputFrame {
-  const o = object(v, 'input', ['tick', 'move', 'cam_yaw_deg', 'jump', 'dash', 'interact', 'pulse', 'pause']);
-  if (requiredTick || 'tick' in o) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) fail('input', 'expected object');
+  const o = v as Obj;
+  for (const k in o) {
+    if (!Object.prototype.hasOwnProperty.call(o, k)) continue;
+    switch (k) {
+      case 'tick':
+        number(o.tick, 'input.tick', 0, Number.MAX_SAFE_INTEGER, true);
+        break;
+      case 'move':
+        if (!Array.isArray(o.move) || o.move.length !== 2) fail('input.move', 'expected [x, z]');
+        number(o.move[0], 'input.move[0]', -1, 1);
+        number(o.move[1], 'input.move[1]', -1, 1);
+        break;
+      case 'cam_yaw_deg':
+        number(o.cam_yaw_deg, 'input.cam_yaw_deg');
+        break;
+      case 'jump':
+      case 'dash':
+      case 'interact':
+      case 'pulse':
+      case 'pause':
+        bool(o[k], `input.${k}`);
+        break;
+      default:
+        fail(`input.${k}`, 'unknown field');
+    }
+  }
+  if (requiredTick && !('tick' in o)) {
     number(o.tick, 'input.tick', 0, Number.MAX_SAFE_INTEGER, true);
-  }
-  if ('move' in o) {
-    if (!Array.isArray(o.move) || o.move.length !== 2) fail('input.move', 'expected [x, z]');
-    number(o.move[0], 'input.move[0]', -1, 1);
-    number(o.move[1], 'input.move[1]', -1, 1);
-  }
-  if ('cam_yaw_deg' in o) number(o.cam_yaw_deg, 'input.cam_yaw_deg');
-  for (const k of ['jump', 'dash', 'interact', 'pulse', 'pause']) {
-    if (k in o) bool(o[k], `input.${k}`);
   }
 }
 

@@ -5,9 +5,13 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build && npm run build:headless",
+    "start": "node scripts/run.mjs",
     "preview": "vite preview --host 0.0.0.0",
     "build:headless": "tsc -p tsconfig.headless.json",
     "headless": "node dist-headless/src/headless/cli.js",
+    "soak": "npm run build:headless && node --jitless --max-semi-space-size=1 --no-lazy --optimize-for-size --expose-gc dist-headless/src/headless/soak.js --seed 7 --nights 10 --out soak.json",
+    "bench": "npm run build && node scripts/bench.mjs --seed 42 --duration 30 --out bench.json",
+    "package": "npm run build && node scripts/package-release.mjs",
     "test": "npm run build:headless && vitest run",
     "verify": "npm test && npm run build"
   },

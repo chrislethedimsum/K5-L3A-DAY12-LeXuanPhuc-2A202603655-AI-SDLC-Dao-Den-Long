@@ -88,6 +88,9 @@ const dist3D = (a: Pos3, b: Pos3): number => Math.hypot(a[0] - b[0], a[1] - b[1]
 const round = (n: number): number => Math.round(n * 1000) / 1000 || 0;
 const round1 = (n: number): number => Math.round(n * 10) / 10 || 0;
 const roundPos = (p: Pos3): Pos3 => [round(p[0]), round(p[1]), round(p[2])];
+const pushEvent = (events: GameEvent[], tick: number, payload: GameEventPayload): void => {
+  events.push({ type: 'event', tick, ...payload } as GameEvent);
+};
 
 export class GameWorld {
   private tick = 0;
@@ -139,11 +142,13 @@ export class GameWorld {
   private windActive = false;
   private windWarning = false;
   private windDirDeg = 0;
+  private benchMode = false;
+  private safeLightsBuf: InternalLantern[] = [];
 
   private idCounters: Record<string, number> = {};
   private ids = new Set<string>();
 
-  constructor(options: { seed?: number; night?: number; scenario?: Scenario } = {}) {
+  constructor(options: { seed?: number; night?: number; scenario?: Scenario; benchMode?: boolean } = {}) {
     const s = options.scenario ?? {};
     const nightNum = (options.night ?? s.night ?? 1) as NightNumber;
     number(nightNum, 'night', 1, 3, true);
@@ -152,15 +157,80 @@ export class GameWorld {
     const seed = options.seed ?? s.seed ?? 42;
     number(seed, 'seed', 0, 4294967295, true);
 
-    this.night = nightNum;
+    this.night = options.benchMode ? 1 : nightNum;
     const map = NIGHT_MAPS[this.night];
     this.rng = mulberry32(seed);
     this.initialDurationS = s.time_left_s ?? map.durationS;
     this.remainingSimTicks = Math.max(1, Math.round(this.initialDurationS * cfg.tick_hz));
-    this.randomMotes = s.random_motes ?? true;
-    this.randomShades = s.random_shades ?? true;
-    this.randomDrifters = s.random_drifters ?? map.driftersEnabled;
-    this.windEnabled = s.wind_enabled ?? map.windEnabled;
+    this.randomMotes = options.benchMode ? false : (s.random_motes ?? true);
+    this.randomShades = options.benchMode ? false : (s.random_shades ?? true);
+    this.randomDrifters = options.benchMode ? false : (s.random_drifters ?? map.driftersEnabled);
+    this.windEnabled = options.benchMode ? false : (s.wind_enabled ?? map.windEnabled);
+    this.benchMode = !!options.benchMode;
+
+    if (this.benchMode) {
+      this.playerPos = [0, 0, 0];
+      this.facing = [...map.spawnFacing];
+      this.grounded = true;
+      this.flames = t.flames;
+      this.successfulLights = 0;
+      this.carried = 0;
+      this.lanterns = map.lanterns.map((l, idx) => {
+        const lit = idx < 3;
+        return {
+          id: l.id,
+          pos: [...l.pos],
+          deposited: lit ? t.lantern_cost : 0,
+          lit,
+          fuel60: lit ? FUEL_MAX_60 : 0,
+          everLit: lit,
+          relitCount: 0
+        };
+      });
+      for (const l of this.lanterns) this.ids.add(l.id);
+
+      const litLanterns = this.lanterns.slice(0, 3);
+      for (let i = 0; i < 200; i++) {
+        let px = 0;
+        let pz = 0;
+        for (let attempt = 0; attempt < 32; attempt++) {
+          const r = Math.sqrt(this.rng()) * 38.5;
+          const theta = this.rng() * Math.PI * 2;
+          px = Math.cos(theta) * r;
+          pz = Math.sin(theta) * r;
+          if (litLanterns.every((l) => Math.hypot(px - l.pos[0], pz - l.pos[2]) >= t.safe_radius + 0.5)) {
+            break;
+          }
+        }
+        this.shades.push({
+          id: this.id('S'),
+          pos: [px, 0.8, pz],
+          state: 'wander',
+          stateTicksLeft: 0,
+          stunPushTicksLeft: 0,
+          stunPushDir: [1, 0],
+          recoilDir: [1, 0],
+          safePushTicksLeft: 0,
+          targetLanternId: null,
+          drainTicks: 0,
+          wanderAngle: this.rng() * Math.PI * 2,
+          createdSimTick: -1
+        });
+      }
+
+      for (let i = 0; i < 100; i++) {
+        const r = Math.sqrt(this.rng()) * 38.5;
+        const theta = this.rng() * Math.PI * 2;
+        this.motes.push({
+          id: this.id('M'),
+          pos: [Math.cos(theta) * r, 0, Math.sin(theta) * r],
+          kind: 'random',
+          ttlTicks: null,
+          createdSimTick: -1
+        });
+      }
+      return;
+    }
 
     this.playerPos = s.player?.pos ? [...s.player.pos] : [...map.spawnPos];
     this.facing = [...map.spawnFacing];
@@ -338,40 +408,53 @@ export class GameWorld {
   }
 
   // Only lit lanterns with fuel >= 30 (fuel60 >= 1800) project a 6m safe zone
-  private safeLanterns(): InternalLantern[] {
-    return this.lanterns.filter((l) => l.lit && l.fuel60 >= LOW_FUEL_60);
+  private safeLanterns(out: InternalLantern[] = []): InternalLantern[] {
+    out.length = 0;
+    for (let i = 0; i < this.lanterns.length; i++) {
+      const l = this.lanterns[i];
+      if (l.lit && l.fuel60 >= LOW_FUEL_60) out.push(l);
+    }
+    return out;
   }
 
-  private isProtectedByLitLantern(pos: Pos3): boolean {
-    return this.safeLanterns().some((l) => distXZ(pos, l.pos) <= t.safe_radius);
+  private isProtectedByLitLantern(pos: Pos3, safeLights: InternalLantern[] = this.safeLanterns()): boolean {
+    for (let i = 0; i < safeLights.length; i++) {
+      if (distXZ(pos, safeLights[i].pos) <= t.safe_radius) return true;
+    }
+    return false;
   }
 
   private findNearestLowFuelLantern(from: Pos3): InternalLantern | null {
-    return (
-      this.lanterns
-        .filter((l) => l.lit && l.fuel60 < LOW_FUEL_60)
-        .sort((a, b) => {
-          const da = distXZ(a.pos, from);
-          const db = distXZ(b.pos, from);
-          return Math.abs(da - db) > 1e-9 ? da - db : a.id.localeCompare(b.id);
-        })[0] ?? null
-    );
+    let best: InternalLantern | null = null;
+    let bestD = Infinity;
+    for (let i = 0; i < this.lanterns.length; i++) {
+      const l = this.lanterns[i];
+      if (!l.lit || l.fuel60 >= LOW_FUEL_60) continue;
+      const d = distXZ(l.pos, from);
+      if (best === null || (Math.abs(d - bestD) > 1e-9 ? d < bestD : l.id.localeCompare(best.id) < 0)) {
+        best = l;
+        bestD = d;
+      }
+    }
+    return best;
   }
 
   private findNearestUnlitLantern(from: Pos3): InternalLantern | null {
-    return (
-      this.lanterns
-        .filter((l) => !l.lit)
-        .sort((a, b) => {
-          const da = distXZ(a.pos, from);
-          const db = distXZ(b.pos, from);
-          return Math.abs(da - db) > 1e-9 ? da - db : a.id.localeCompare(b.id);
-        })[0] ?? null
-    );
+    let best: InternalLantern | null = null;
+    let bestD = Infinity;
+    for (let i = 0; i < this.lanterns.length; i++) {
+      const l = this.lanterns[i];
+      if (l.lit) continue;
+      const d = distXZ(l.pos, from);
+      if (best === null || (Math.abs(d - bestD) > 1e-9 ? d < bestD : l.id.localeCompare(best.id) < 0)) {
+        best = l;
+        bestD = d;
+      }
+    }
+    return best;
   }
 
-  private findSafeZoneEscapeTarget(p: Pos3): Pos3 | null {
-    const lights = this.safeLanterns();
+  private findSafeZoneEscapeTarget(p: Pos3, lights: InternalLantern[] = this.safeLanterns()): Pos3 | null {
     const valid = (v: Pos3) =>
       isInsideShadeMap(this.night, v[0], v[2]) &&
       lights.every((l) => distXZ(v, l.pos) >= t.safe_radius - 1e-6);
@@ -428,25 +511,33 @@ export class GameWorld {
     }
   }
 
-  private moveShadeStep(s: InternalShade, dx: number, dz: number, respectSafeZone: boolean): boolean {
-    const tryPos = (tx: number, tz: number): boolean => {
-      const gh = getGroundHeight(this.night, tx, tz);
-      if (gh === null || !Number.isFinite(gh)) return false;
-      if (gh > s.pos[1] + cfg.step_up_max + 0.8) return false;
-      if (
-        respectSafeZone &&
-        this.safeLanterns().some((l) => Math.hypot(tx - l.pos[0], tz - l.pos[2]) < t.safe_radius - 1e-6)
-      ) {
-        return false;
+  private tryShadePos(s: InternalShade, tx: number, tz: number, lights: InternalLantern[] | null): boolean {
+    const gh = getGroundHeight(this.night, tx, tz);
+    if (gh === null || !Number.isFinite(gh)) return false;
+    if (gh > s.pos[1] + cfg.step_up_max + 0.8) return false;
+    if (lights) {
+      for (let i = 0; i < lights.length; i++) {
+        const l = lights[i];
+        if (Math.hypot(tx - l.pos[0], tz - l.pos[2]) < t.safe_radius - 1e-6) return false;
       }
-      s.pos[0] = tx;
-      s.pos[2] = tz;
-      s.pos[1] = Math.max(gh, s.pos[1] - 0.8 >= gh ? gh + 0.8 : gh);
-      return true;
-    };
-    if (tryPos(s.pos[0] + dx, s.pos[2] + dz)) return true;
-    if (Math.abs(dx) > 1e-9 && tryPos(s.pos[0] + dx, s.pos[2])) return true;
-    if (Math.abs(dz) > 1e-9 && tryPos(s.pos[0], s.pos[2] + dz)) return true;
+    }
+    s.pos[0] = tx;
+    s.pos[2] = tz;
+    s.pos[1] = Math.max(gh, s.pos[1] - 0.8 >= gh ? gh + 0.8 : gh);
+    return true;
+  }
+
+  private moveShadeStep(
+    s: InternalShade,
+    dx: number,
+    dz: number,
+    respectSafeZone: boolean,
+    safeLights?: InternalLantern[]
+  ): boolean {
+    const lights = respectSafeZone ? (safeLights ?? this.safeLanterns(this.safeLightsBuf)) : null;
+    if (this.tryShadePos(s, s.pos[0] + dx, s.pos[2] + dz, lights)) return true;
+    if (Math.abs(dx) > 1e-9 && this.tryShadePos(s, s.pos[0] + dx, s.pos[2], lights)) return true;
+    if (Math.abs(dz) > 1e-9 && this.tryShadePos(s, s.pos[0], s.pos[2] + dz, lights)) return true;
     return false;
   }
 
@@ -546,10 +637,22 @@ export class GameWorld {
       throw new Error('input.tick must equal current tick');
     }
 
+    if (this.benchMode) {
+      this.tick++;
+      this.simTick++;
+      const benchMap = NIGHT_MAPS[this.night];
+      const safeLights = this.safeLanterns(this.safeLightsBuf);
+      const stepM = benchMap.shadeSpeed * 0.5 * dt;
+      for (let i = 0; i < this.shades.length; i++) {
+        const s = this.shades[i];
+        if (!this.moveShadeStep(s, Math.cos(s.wanderAngle) * stepM, Math.sin(s.wanderAngle) * stepM, true, safeLights)) {
+          s.wanderAngle += Math.PI * 0.75;
+        }
+      }
+      return [];
+    }
+
     const events: GameEvent[] = [];
-    const emit = (tick: number, payload: GameEventPayload) => {
-      events.push({ type: 'event', tick, ...payload } as GameEvent);
-    };
 
     // Step 1: Read input & handle pause first
     const pausePressed = !!input.pause && !this.lastPause;
@@ -557,13 +660,13 @@ export class GameWorld {
     if (this.state === 'playing' && pausePressed) {
       this.state = 'paused';
       this.tick++;
-      emit(this.tick, { name: 'paused', data: {} });
+      pushEvent(events, this.tick, { name: 'paused', data: {} });
       return events;
     }
     if (this.state === 'paused') {
       if (pausePressed) {
         this.state = 'playing';
-        emit(this.tick + 1, { name: 'resumed', data: {} });
+        pushEvent(events, this.tick + 1, { name: 'resumed', data: {} });
       } else {
         this.tick++;
         return [];
@@ -576,7 +679,7 @@ export class GameWorld {
 
     if (!this.nightStarted) {
       this.nightStarted = true;
-      emit(stepTick, { name: 'night_start', data: { night: this.night } });
+      pushEvent(events, stepTick, { name: 'night_start', data: { night: this.night } });
     }
 
     const map = NIGHT_MAPS[this.night];
@@ -603,11 +706,19 @@ export class GameWorld {
       }
     }
 
-    this.motes = this.motes.filter((m) => {
-      if (m.ttlTicks === null) return true;
-      m.ttlTicks--;
-      return m.ttlTicks > 0;
-    });
+    {
+      let writeIdx = 0;
+      for (let i = 0; i < this.motes.length; i++) {
+        const m = this.motes[i];
+        if (m.ttlTicks === null) {
+          this.motes[writeIdx++] = m;
+        } else {
+          m.ttlTicks--;
+          if (m.ttlTicks > 0) this.motes[writeIdx++] = m;
+        }
+      }
+      this.motes.length = writeIdx;
+    }
 
     for (const c of this.charms) {
       if (!c.available && c.respawnTicks > 0) {
@@ -631,13 +742,19 @@ export class GameWorld {
       if (s.safePushTicksLeft > 0) s.safePushTicksLeft--;
     }
 
-    this.drifters = this.drifters.filter((d) => {
-      if (d.state === 'flee') {
-        d.fleeTicksLeft--;
-        return d.fleeTicksLeft > 0;
+    if (this.drifters.length > 0) {
+      let writeIdx = 0;
+      for (let i = 0; i < this.drifters.length; i++) {
+        const d = this.drifters[i];
+        if (d.state === 'flee') {
+          d.fleeTicksLeft--;
+          if (d.fleeTicksLeft > 0) this.drifters[writeIdx++] = d;
+        } else {
+          this.drifters[writeIdx++] = d;
+        }
       }
-      return true;
-    });
+      this.drifters.length = writeIdx;
+    }
 
     if (this.windEnabled) {
       const cycleTick = this.simTick % cfg.wind_interval_ticks;
@@ -660,19 +777,21 @@ export class GameWorld {
     for (const l of this.lanterns) {
       if (l.lit) l.fuel60 -= DECAY_PER_TICK_60;
     }
-    const drainingShades = [...this.shades]
-      .filter((s) => s.state === 'drain' && s.targetLanternId)
-      .sort((a, b) => a.id.localeCompare(b.id));
-    for (const s of drainingShades) {
-      const l = this.lanterns.find((x) => x.id === s.targetLanternId);
-      if (l && l.lit) {
-        l.fuel60 -= DRAIN_PER_TICK_60;
-        s.drainTicks++;
-        if (s.drainTicks % cfg.tick_hz === 0) {
-          emit(stepTick, {
-            name: 'fuel_drain',
-            data: { lantern_id: l.id, shade_id: s.id, fuel: round1(Math.max(0, l.fuel60) / cfg.tick_hz) }
-          });
+    if (this.shades.length > 0 && this.shades.some((s) => s.state === 'drain' && s.targetLanternId)) {
+      const drainingShades = this.shades
+        .filter((s) => s.state === 'drain' && s.targetLanternId)
+        .sort((a, b) => a.id.localeCompare(b.id));
+      for (const s of drainingShades) {
+        const l = this.lanterns.find((x) => x.id === s.targetLanternId);
+        if (l && l.lit) {
+          l.fuel60 -= DRAIN_PER_TICK_60;
+          s.drainTicks++;
+          if (s.drainTicks % cfg.tick_hz === 0) {
+            pushEvent(events, stepTick, {
+              name: 'fuel_drain',
+              data: { lantern_id: l.id, shade_id: s.id, fuel: round1(Math.max(0, l.fuel60) / cfg.tick_hz) }
+            });
+          }
         }
       }
     }
@@ -683,7 +802,7 @@ export class GameWorld {
         l.fuel60 = 0;
         l.deposited = 0;
         l.everLit = true;
-        emit(stepTick, { name: 'lantern_out', data: { lantern_id: l.id } });
+        pushEvent(events, stepTick, { name: 'lantern_out', data: { lantern_id: l.id } });
         for (const s of this.shades) {
           if (s.state === 'drain' && s.targetLanternId === l.id) {
             s.state = 'wander';
@@ -722,7 +841,7 @@ export class GameWorld {
         this.dashDir = wLen > 1e-6 ? [wx / wLen, wz / wLen] : [...this.facing];
         this.launchActive = false;
         this.playerVel[1] = 0;
-        emit(stepTick, { name: 'dash', data: {} });
+        pushEvent(events, stepTick, { name: 'dash', data: {} });
       }
 
       let vx = 0;
@@ -807,14 +926,16 @@ export class GameWorld {
         this.launchActive = false;
         this.dashTicksLeft = 0;
         if (this.flames > 0) this.respawnTicks = cfg.respawn_wait_ticks;
-        emit(stepTick, { name: 'player_hit', data: { by: 'fall', flames: this.flames, dropped: 0, lost } });
+        pushEvent(events, stepTick, { name: 'player_hit', data: { by: 'fall', flames: this.flames, dropped: 0, lost } });
       }
     }
 
     // Step 4: Pickup motes (up to dynamic capacity) and charms
     if (this.respawnTicks === 0 && !this.falling) {
       const cap = this.getPlayerCapacity();
-      this.motes = this.motes.filter((m) => {
+      let writeIdx = 0;
+      for (let i = 0; i < this.motes.length; i++) {
+        const m = this.motes[i];
         if (
           m.createdSimTick < this.simTick &&
           this.carried < cap &&
@@ -822,11 +943,12 @@ export class GameWorld {
           Math.abs(this.playerPos[1] - m.pos[1]) <= 1.5
         ) {
           this.carried++;
-          emit(stepTick, { name: 'mote_picked', data: { carried: this.carried } });
-          return false;
+          pushEvent(events, stepTick, { name: 'mote_picked', data: { carried: this.carried } });
+        } else {
+          this.motes[writeIdx++] = m;
         }
-        return true;
-      });
+      }
+      this.motes.length = writeIdx;
 
       for (const c of this.charms) {
         if (
@@ -838,7 +960,7 @@ export class GameWorld {
           c.respawnTicks = cfg.charm_respawn_ticks;
           this.charmTicks = cfg.charm_duration_ticks;
           this.dashCdTicks = 0;
-          emit(stepTick, { name: 'charm_picked', data: { charm_id: c.id, charm_ticks: cfg.charm_duration_ticks } });
+          pushEvent(events, stepTick, { name: 'charm_picked', data: { charm_id: c.id, charm_ticks: cfg.charm_duration_ticks } });
         }
       }
     }
@@ -868,7 +990,7 @@ export class GameWorld {
             target.deposited += amount;
             this.carried -= amount;
             this.score += amount * t.score.per_mote;
-            emit(stepTick, {
+            pushEvent(events, stepTick, {
               name: 'deposit',
               data: { lantern_id: target.id, amount, deposited: target.deposited }
             });
@@ -880,7 +1002,7 @@ export class GameWorld {
               if (relight) target.relitCount++;
               this.successfulLights++;
               this.score += relight ? 40 : t.score.per_lantern;
-              emit(stepTick, { name: 'lantern_lit', data: { lantern_id: target.id, relight } });
+              pushEvent(events, stepTick, { name: 'lantern_lit', data: { lantern_id: target.id, relight } });
               for (const s of this.shades) {
                 if (distXZ(s.pos, target.pos) < t.safe_radius) {
                   s.safePushTicksLeft = Math.max(s.safePushTicksLeft, cfg.safe_push_max_ticks);
@@ -897,7 +1019,7 @@ export class GameWorld {
             target.fuel60 = Math.min(FUEL_MAX_60, target.fuel60 + used * FUEL_PER_MOTE_60);
             this.carried -= used;
             this.score += used * t.score.per_mote;
-            emit(stepTick, {
+            pushEvent(events, stepTick, {
               name: 'refuel',
               data: { lantern_id: target.id, amount: used, fuel: round1(target.fuel60 / cfg.tick_hz) }
             });
@@ -919,19 +1041,22 @@ export class GameWorld {
     }
 
     // Step 6: Update safe zones (lit && fuel >= 30)
-    for (const s of this.shades) {
-      if (this.isProtectedByLitLantern(s.pos)) {
-        const target = this.findSafeZoneEscapeTarget(s.pos);
-        if (target) {
-          if (s.safePushTicksLeft > 0) {
-            const dx = target[0] - s.pos[0];
-            const dz = target[2] - s.pos[2];
-            const frac = 1 / s.safePushTicksLeft;
-            s.pos[0] += dx * frac;
-            s.pos[2] += dz * frac;
-          } else {
-            s.pos[0] = target[0];
-            s.pos[2] = target[2];
+    const safeLights = this.safeLanterns(this.safeLightsBuf);
+    if (safeLights.length > 0 && this.shades.length > 0) {
+      for (const s of this.shades) {
+        if (this.isProtectedByLitLantern(s.pos, safeLights)) {
+          const target = this.findSafeZoneEscapeTarget(s.pos, safeLights);
+          if (target) {
+            if (s.safePushTicksLeft > 0) {
+              const dx = target[0] - s.pos[0];
+              const dz = target[2] - s.pos[2];
+              const frac = 1 / s.safePushTicksLeft;
+              s.pos[0] += dx * frac;
+              s.pos[2] += dz * frac;
+            } else {
+              s.pos[0] = target[0];
+              s.pos[2] = target[2];
+            }
           }
         }
       }
@@ -989,12 +1114,12 @@ export class GameWorld {
             }
             d.stolen = 0;
             d.fleeTicksLeft = cfg.drifter_pulse_drop_flee_ticks;
-            emit(stepTick, { name: 'drifter_drop', data: { drifter_id: d.id, amount: dropAmount } });
+            pushEvent(events, stepTick, { name: 'drifter_drop', data: { drifter_id: d.id, amount: dropAmount } });
           }
         }
       }
 
-      emit(stepTick, { name: 'pulse', data: { stunned_ids: stunnedIds } });
+      pushEvent(events, stepTick, { name: 'pulse', data: { stunned_ids: stunnedIds } });
     }
 
     // Step 8: Move Shades (with drain state machine) & Drifters
@@ -1012,7 +1137,7 @@ export class GameWorld {
       }
       if (s.state === 'recoil') {
         const stepM = cfg.recoil_distance_m / cfg.recoil_ticks;
-        this.moveShadeStep(s, s.recoilDir[0] * stepM, s.recoilDir[1] * stepM, true);
+        this.moveShadeStep(s, s.recoilDir[0] * stepM, s.recoilDir[1] * stepM, true, safeLights);
         continue;
       }
 
@@ -1052,7 +1177,8 @@ export class GameWorld {
             s,
             ((this.playerPos[0] - s.pos[0]) / dPlayer) * stepM,
             ((this.playerPos[2] - s.pos[2]) / dPlayer) * stepM,
-            true
+            true,
+            safeLights
           );
         }
       } else {
@@ -1070,7 +1196,8 @@ export class GameWorld {
               s,
               ((lowTarget.pos[0] - s.pos[0]) / dLow) * stepM,
               ((lowTarget.pos[2] - s.pos[2]) / dLow) * stepM,
-              true
+              true,
+              safeLights
             );
             if (distXZ(s.pos, lowTarget.pos) <= 2.0) {
               s.state = 'drain';
@@ -1087,17 +1214,18 @@ export class GameWorld {
               s,
               ((unlitTarget.pos[0] - s.pos[0]) / dUnlit) * stepM,
               ((unlitTarget.pos[2] - s.pos[2]) / dUnlit) * stepM,
-              true
+              true,
+              safeLights
             );
             if (!moved) {
               const drift = map.shadeSpeed * 0.5 * dt;
-              if (!this.moveShadeStep(s, Math.cos(s.wanderAngle) * drift, Math.sin(s.wanderAngle) * drift, true)) {
+              if (!this.moveShadeStep(s, Math.cos(s.wanderAngle) * drift, Math.sin(s.wanderAngle) * drift, true, safeLights)) {
                 s.wanderAngle += Math.PI * 0.75;
               }
             }
           } else {
             const stepM = map.shadeSpeed * 0.5 * dt;
-            if (!this.moveShadeStep(s, Math.cos(s.wanderAngle) * stepM, Math.sin(s.wanderAngle) * stepM, true)) {
+            if (!this.moveShadeStep(s, Math.cos(s.wanderAngle) * stepM, Math.sin(s.wanderAngle) * stepM, true, safeLights)) {
               s.wanderAngle += Math.PI * 0.75;
             }
           }
@@ -1141,25 +1269,27 @@ export class GameWorld {
 
     // Step 9: Contact — Drifters steal first, then Shades hit (ascending id)
     if (this.respawnTicks === 0 && !this.falling && this.flames > 0) {
-      const sortedDrifters = [...this.drifters].sort((a, b) => a.id.localeCompare(b.id));
-      for (const d of sortedDrifters) {
-        if (
-          d.createdSimTick < this.simTick &&
-          d.state === 'chase' &&
-          !d.hasStolen &&
-          distXZ(d.pos, this.playerPos) <= cfg.drifter_steal_radius
-        ) {
-          const amount = Math.min(cfg.drifter_steal_max, this.carried);
-          this.carried -= amount;
-          d.stolen = amount;
-          d.hasStolen = true;
-          d.state = 'flee';
-          d.fleeTicksLeft = cfg.drifter_flee_ticks;
-          emit(stepTick, { name: 'drifter_steal', data: { drifter_id: d.id, amount, carried: this.carried } });
+      if (this.drifters.length > 0) {
+        const sortedDrifters = [...this.drifters].sort((a, b) => a.id.localeCompare(b.id));
+        for (const d of sortedDrifters) {
+          if (
+            d.createdSimTick < this.simTick &&
+            d.state === 'chase' &&
+            !d.hasStolen &&
+            distXZ(d.pos, this.playerPos) <= cfg.drifter_steal_radius
+          ) {
+            const amount = Math.min(cfg.drifter_steal_max, this.carried);
+            this.carried -= amount;
+            d.stolen = amount;
+            d.hasStolen = true;
+            d.state = 'flee';
+            d.fleeTicksLeft = cfg.drifter_flee_ticks;
+            pushEvent(events, stepTick, { name: 'drifter_steal', data: { drifter_id: d.id, amount, carried: this.carried } });
+          }
         }
       }
 
-      if (this.invulnTicks === 0 && !this.isProtectedByLitLantern(this.playerPos)) {
+      if (this.shades.length > 0 && this.invulnTicks === 0 && !this.isProtectedByLitLantern(this.playerPos, safeLights)) {
         const sortedShades = [...this.shades].sort((a, b) => a.id.localeCompare(b.id));
         for (const s of sortedShades) {
           if (
@@ -1200,7 +1330,7 @@ export class GameWorld {
             s.recoilDir =
               dHit > 1e-9 ? [(s.pos[0] - this.playerPos[0]) / dHit, (s.pos[2] - this.playerPos[2]) / dHit] : [1, 0];
 
-            emit(stepTick, { name: 'player_hit', data: { by: 'shade', flames: this.flames, dropped } });
+            pushEvent(events, stepTick, { name: 'player_hit', data: { by: 'shade', flames: this.flames, dropped } });
             break;
           }
         }
@@ -1248,7 +1378,7 @@ export class GameWorld {
           createdSimTick: this.simTick
         };
         this.shades.push(shade);
-        emit(stepTick, { name: 'shade_spawned', data: { id: shade.id } });
+        pushEvent(events, stepTick, { name: 'shade_spawned', data: { id: shade.id } });
       }
     }
 
@@ -1294,7 +1424,7 @@ export class GameWorld {
     }
 
     if (this.state === 'won' || this.state === 'lost') {
-      emit(stepTick, { name: 'game_over', data: { result: this.state, reason: this.reason! } });
+      pushEvent(events, stepTick, { name: 'game_over', data: { result: this.state, reason: this.reason! } });
     }
 
     return events;
