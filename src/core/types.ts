@@ -23,9 +23,11 @@ export interface ScenarioLanternPatch {
   pos?: Pos3;
   deposited?: number;
   lit?: boolean;
+  fuel?: number;
+  ever_lit?: boolean;
 }
 
-export type ShadeState = 'spawning' | 'wander' | 'chase' | 'recoil' | 'stunned';
+export type ShadeState = 'spawning' | 'wander' | 'chase' | 'drain' | 'recoil' | 'stunned';
 export type DrifterState = 'idle' | 'chase' | 'flee';
 export type MoteKind = 'random' | 'dropped';
 
@@ -42,6 +44,7 @@ export interface ScenarioShade {
   state?: ShadeState;
   state_ticks_left?: number;
   stun_left_s?: number;
+  target_lantern_id?: string;
 }
 
 export interface ScenarioDrifter {
@@ -71,6 +74,7 @@ export interface Scenario {
     pos?: Pos3;
     carried?: number;
     flames?: number;
+    successful_lights?: number;
     invuln_ticks?: number;
     dash_cd_ticks?: number;
     pulse_cd_ticks?: number;
@@ -86,7 +90,7 @@ export interface Scenario {
 }
 
 export type GameState = 'playing' | 'paused' | 'won' | 'lost';
-export type GameOverReason = 'all_lit' | 'dawn' | 'no_flames';
+export type GameOverReason = 'dawn_survived' | 'dawn' | 'no_flames';
 
 export interface Snapshot {
   type: 'snapshot';
@@ -106,6 +110,7 @@ export interface Snapshot {
     grounded: boolean;
     flames: number;
     carried: number;
+    capacity: number;
     invuln: boolean;
     dash_cd_s: number;
     pulse_cd_s: number;
@@ -116,6 +121,9 @@ export interface Snapshot {
     pos: Pos3;
     lit: boolean;
     deposited: number;
+    fuel: number;
+    ever_lit: boolean;
+    relit_count: number;
   }[];
   shades: {
     id: string;
@@ -158,7 +166,10 @@ export interface HudState {
 export type GameEventPayload =
   | { name: 'mote_picked'; data: { carried: number } }
   | { name: 'deposit'; data: { lantern_id: string; amount: number; deposited: number } }
-  | { name: 'lantern_lit'; data: { lantern_id: string } }
+  | { name: 'lantern_lit'; data: { lantern_id: string; relight: boolean } }
+  | { name: 'refuel'; data: { lantern_id: string; amount: number; fuel: number } }
+  | { name: 'lantern_out'; data: { lantern_id: string } }
+  | { name: 'fuel_drain'; data: { lantern_id: string; shade_id: string; fuel: number } }
   | { name: 'pulse'; data: { stunned_ids: string[] } }
   | { name: 'player_hit'; data: { by: 'shade' | 'fall'; flames: number; dropped: number; lost?: number } }
   | { name: 'shade_spawned'; data: { id: string } }

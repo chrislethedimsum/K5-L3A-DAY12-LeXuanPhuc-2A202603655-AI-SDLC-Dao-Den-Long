@@ -60,7 +60,7 @@ export function validateInputsFile(v: unknown): asserts v is InputsFile {
   }
 }
 
-const VALID_SHADE_STATES = new Set(['spawning', 'wander', 'chase', 'recoil', 'stunned']);
+const VALID_SHADE_STATES = new Set(['spawning', 'wander', 'chase', 'drain', 'recoil', 'stunned']);
 const VALID_DRIFTER_STATES = new Set(['idle', 'chase', 'flee']);
 
 export function validateScenario(v: unknown, nightOverride?: NightNumber): asserts v is Scenario {
@@ -94,6 +94,7 @@ export function validateScenario(v: unknown, nightOverride?: NightNumber): asser
       'pos',
       'carried',
       'flames',
+      'successful_lights',
       'invuln_ticks',
       'dash_cd_ticks',
       'pulse_cd_ticks',
@@ -103,7 +104,9 @@ export function validateScenario(v: unknown, nightOverride?: NightNumber): asser
     ]);
     if ('pos' in p) pos3(p.pos, 'scenario.player.pos');
     if ('flames' in p) number(p.flames, 'scenario.player.flames', 1, t.flames, true);
-    if ('carried' in p) number(p.carried, 'scenario.player.carried', 0, t.carry_capacity, true);
+    const succLights = 'successful_lights' in p ? number(p.successful_lights, 'scenario.player.successful_lights', 0, 100, true) : 0;
+    const cap = Math.min(t.capacity_max, t.carry_capacity + 2 * succLights);
+    if ('carried' in p) number(p.carried, 'scenario.player.carried', 0, cap, true);
     if ('invuln_ticks' in p) number(p.invuln_ticks, 'scenario.player.invuln_ticks', 0, 100000, true);
     if ('dash_cd_ticks' in p) number(p.dash_cd_ticks, 'scenario.player.dash_cd_ticks', 0, 100000, true);
     if ('pulse_cd_ticks' in p) number(p.pulse_cd_ticks, 'scenario.player.pulse_cd_ticks', 0, 100000, true);
@@ -117,18 +120,27 @@ export function validateScenario(v: unknown, nightOverride?: NightNumber): asser
     if (!Array.isArray(o.lanterns)) fail('scenario.lanterns', 'expected array');
     const seen = new Set<string>();
     for (const item of o.lanterns) {
-      const e = object(item, 'scenario.lanterns[]', ['id', 'pos', 'deposited', 'lit']);
+      const e = object(item, 'scenario.lanterns[]', ['id', 'pos', 'deposited', 'lit', 'fuel', 'ever_lit']);
       if (typeof e.id !== 'string' || !validLanternIds.has(e.id) || seen.has(e.id)) {
         fail('scenario.lanterns[].id', `expected unique lantern id for night ${night}`);
       }
       seen.add(e.id);
       if ('pos' in e) pos3(e.pos, 'scenario.lanterns[].pos');
-      if ('deposited' in e) number(e.deposited, 'scenario.lanterns[].deposited', 0, t.lantern_cost, true);
+      if ('ever_lit' in e) bool(e.ever_lit, 'scenario.lanterns[].ever_lit');
       if ('lit' in e) bool(e.lit, 'scenario.lanterns[].lit');
-      if ('deposited' in e && 'lit' in e) {
-        if (e.lit !== (e.deposited === t.lantern_cost)) {
-          fail('scenario.lanterns[]', 'lit must equal deposited === lantern_cost');
-        }
+      if ('fuel' in e) number(e.fuel, 'scenario.lanterns[].fuel', 0, t.fuel_max);
+      if ('deposited' in e) number(e.deposited, 'scenario.lanterns[].deposited', 0, t.lantern_cost, true);
+      if ('lit' in e && e.lit === false && 'fuel' in e && (e.fuel as number) > 0) {
+        fail('scenario.lanterns[]', 'unlit lantern cannot have positive fuel');
+      }
+      if ('lit' in e && e.lit === true && 'fuel' in e && (e.fuel as number) <= 0) {
+        fail('scenario.lanterns[]', 'lit lantern must have positive fuel');
+      }
+      if ('lit' in e && e.lit === true && 'ever_lit' in e && e.ever_lit === false) {
+        fail('scenario.lanterns[]', 'lit lantern must have ever_lit true');
+      }
+      if ('deposited' in e && 'lit' in e && e.lit === false && e.deposited === t.lantern_cost) {
+        fail('scenario.lanterns[]', 'unlit lantern cannot have full deposited');
       }
     }
   }
@@ -153,7 +165,14 @@ export function validateScenario(v: unknown, nightOverride?: NightNumber): asser
     if (!Array.isArray(o.shades)) fail('scenario.shades', 'expected array');
     const ids = new Set<string>();
     for (let i = 0; i < o.shades.length; i++) {
-      const e = object(o.shades[i], `scenario.shades[${i}]`, ['id', 'pos', 'state', 'state_ticks_left', 'stun_left_s']);
+      const e = object(o.shades[i], `scenario.shades[${i}]`, [
+        'id',
+        'pos',
+        'state',
+        'state_ticks_left',
+        'stun_left_s',
+        'target_lantern_id'
+      ]);
       if ('id' in e) {
         if (typeof e.id !== 'string' || !e.id.trim() || ids.has(e.id) || validLanternIds.has(e.id)) {
           fail(`scenario.shades[${i}].id`, 'expected unique nonempty id');
@@ -166,6 +185,9 @@ export function validateScenario(v: unknown, nightOverride?: NightNumber): asser
       }
       if ('state_ticks_left' in e) number(e.state_ticks_left, `scenario.shades[${i}].state_ticks_left`, 0, 100000, true);
       if ('stun_left_s' in e) number(e.stun_left_s, `scenario.shades[${i}].stun_left_s`, 0);
+      if ('target_lantern_id' in e && (typeof e.target_lantern_id !== 'string' || !validLanternIds.has(e.target_lantern_id))) {
+        fail(`scenario.shades[${i}].target_lantern_id`, 'invalid lantern id');
+      }
     }
   }
 

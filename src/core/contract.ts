@@ -2,8 +2,8 @@ import raw from '../../game.contract.json';
 import type { Tuning } from './types';
 
 function validate(): void {
-  if (raw.contract_version !== '1.1' || !raw.team || !raw.build_cmd || !raw.run_cmd || !raw.headless_cmd) {
-    throw new Error('Invalid contract v1.1 metadata');
+  if (raw.contract_version !== '1.2' || !raw.team || !raw.build_cmd || !raw.run_cmd || !raw.headless_cmd) {
+    throw new Error('Invalid contract v1.2 metadata');
   }
   for (const [key, value] of Object.entries(raw.tuning)) {
     if (key === 'score') {
@@ -16,7 +16,11 @@ function validate(): void {
       throw new Error(`Invalid tuning ${key}`);
     }
   }
-  if (raw.tuning.lantern_count_night1 !== 5 || raw.tuning.lantern_cost > raw.tuning.carry_capacity) {
+  if (
+    raw.tuning.lantern_count_night1 !== 5 ||
+    raw.tuning.lantern_cost > raw.tuning.carry_capacity ||
+    raw.tuning.capacity_max < raw.tuning.carry_capacity
+  ) {
     throw new Error('Inconsistent tuning');
   }
 }

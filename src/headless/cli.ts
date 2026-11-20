@@ -23,7 +23,7 @@ function main(args: string[]): void {
 
   const seed = flags.has('seed') ? integer('seed', 42, 0, 4294967295) : undefined;
   const night = flags.has('night') ? (integer('night', 1, 1, 3) as NightNumber) : undefined;
-  const ticks = integer('ticks', 18000, 0);
+  const ticks = integer('ticks', 14400, 0);
   const interval = integer('snapshot-every', 10, 1);
 
   let scenario: Scenario | undefined;

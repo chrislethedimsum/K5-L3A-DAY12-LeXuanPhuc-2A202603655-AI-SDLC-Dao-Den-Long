@@ -82,8 +82,8 @@ export const NIGHT_MAPS: Record<NightNumber, NightMapConfig> = {
     night: 1,
     name: 'Đảo Bến',
     subtitle: 'Đêm 1 · Hòn đảo đầu tiên',
-    elderLine: '“Sương đen đã nuốt lấy bờ bến. Hãy gom đom đóm và thắp lại năm ngọn đèn cũ.”',
-    durationS: 300,
+    elderLine: '“Sương đen đã nuốt lấy bờ bến. Hãy gom đom đóm, thắp đèn và giữ đảo sáng tới bình minh!”',
+    durationS: 240,
     spawnPos: [0, 0, 0],
     spawnFacing: [0, 1],
     lanterns: [
@@ -107,8 +107,8 @@ export const NIGHT_MAPS: Record<NightNumber, NightMapConfig> = {
     night: 2,
     name: 'Đảo Cau',
     subtitle: 'Đêm 2 · Hai bờ cầu tre',
-    elderLine: '“Cầu tre nối đôi bờ sương, nhưng cẩn thận Gió Lạc rình rập khi túi sáng đầy.”',
-    durationS: 330,
+    elderLine: '“Cầu tre nối đôi bờ sương. Cẩn thận Gió Lạc và đừng để đèn cạn dầu trước bình minh.”',
+    durationS: 270,
     spawnPos: [0, 0, 0],
     spawnFacing: [0, 1],
     lanterns: [
@@ -141,8 +141,8 @@ export const NIGHT_MAPS: Record<NightNumber, NightMapConfig> = {
     night: 3,
     name: 'Đảo Chuông',
     subtitle: 'Đêm 3 · Ba tầng tháp cổ',
-    elderLine: '“Gió đêm đang nổi lên quanh tháp chuông. Thắp đủ bảy ngọn đèn để đón bình minh!”',
-    durationS: 360,
+    elderLine: '“Gió đêm nổi lên quanh tháp chuông. Giữ ít nhất năm ngọn đèn sáng tới bình minh!”',
+    durationS: 300,
     spawnPos: [0, 0, 32],
     spawnFacing: [0, -1],
     lanterns: [
