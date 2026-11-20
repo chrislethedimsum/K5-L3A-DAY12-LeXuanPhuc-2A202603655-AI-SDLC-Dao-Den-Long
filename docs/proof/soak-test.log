@@ -1,2 +1,2 @@
 $ /opt/homebrew/Cellar/node/26.13.1_2/bin/node --jitless --max-semi-space-size=1 --no-lazy --optimize-for-size --expose-gc dist-headless/src/headless/soak.js --seed 7 --nights 10 --out docs/proof/soak-proof.json
-exit=0 elapsed_ms=421
+exit=0 elapsed_ms=436

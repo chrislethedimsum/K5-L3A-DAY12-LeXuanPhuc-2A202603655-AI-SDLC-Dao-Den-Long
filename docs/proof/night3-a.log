@@ -1,2 +1,2 @@
 $ /opt/homebrew/Cellar/node/26.13.1_2/bin/node dist-headless/src/headless/cli.js --seed 42 --night 3 --ticks 1200 --out docs/proof/night3-a.jsonl
-exit=0 elapsed_ms=58
+exit=0 elapsed_ms=60

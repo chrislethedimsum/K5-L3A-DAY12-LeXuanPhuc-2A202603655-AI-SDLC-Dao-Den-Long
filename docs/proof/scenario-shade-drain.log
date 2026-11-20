@@ -1,2 +1,2 @@
 $ /opt/homebrew/Cellar/node/26.13.1_2/bin/node dist-headless/src/headless/cli.js --seed 42 --night 1 --scenario tests/fixtures/shade-drain.json --inputs tests/fixtures/shade-drain-inputs.json --ticks 120 --out docs/proof/shade-drain.jsonl
-exit=0 elapsed_ms=43
+exit=0 elapsed_ms=48

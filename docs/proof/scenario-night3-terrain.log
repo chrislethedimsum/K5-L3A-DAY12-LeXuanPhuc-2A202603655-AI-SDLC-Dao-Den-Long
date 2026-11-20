@@ -1,2 +1,2 @@
 $ /opt/homebrew/Cellar/node/26.13.1_2/bin/node dist-headless/src/headless/cli.js --seed 42 --night 3 --scenario tests/fixtures/night3-terrain.json --inputs tests/fixtures/night3-terrain-inputs.json --ticks 120 --out docs/proof/night3-terrain.jsonl
-exit=0 elapsed_ms=44
+exit=0 elapsed_ms=48
