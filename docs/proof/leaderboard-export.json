@@ -1,0 +1,18 @@
+{
+  "entries": [
+    {
+      "name": "Minh_1",
+      "score": 1850,
+      "nights_won": 3,
+      "achieved_at": "2026-11-20T10:02:00+07:00",
+      "seed": 42
+    },
+    {
+      "name": "Thảo_2",
+      "score": 900,
+      "nights_won": 1,
+      "achieved_at": "2026-11-20T10:05:00+07:00",
+      "seed": 42
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 import { describe, it, expect, afterAll } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 
@@ -20,8 +20,8 @@ const records = (s: string) =>
     .split('\n')
     .map((l) => JSON.parse(l));
 
-describe('headless contract v1.2', () => {
-  it.each([1, 2, 3])('emits byte-identical JSONL for Night %i with v1.2 snapshot & end record', (night) => {
+describe('headless contract v1.3', () => {
+  it.each([1, 2, 3])('emits byte-identical JSONL for Night %i with snapshot & end record', (night) => {
     const a = run('--seed', '42', '--night', String(night), '--ticks', '100');
     const b = run('--seed', '42', '--night', String(night), '--ticks', '100');
     expect(a.status).toBe(0);
@@ -133,5 +133,53 @@ describe('headless contract v1.2', () => {
     writeFileSync(path, '{bad');
     expect(run('--scenario', path).status).toBe(2);
     expect(run('--scenario', json('bad-scenario.json', { player: { flames: -1 } })).status).toBe(2);
+  });
+
+  it('runs soak test CLI across multiple nights cleanly and rejects bad flags with exit 2', () => {
+    const soakCli = resolve('dist-headless/src/headless/soak.js');
+    const outPath = join(temp, 'soak-test.json');
+    const r = spawnSync(
+      process.execPath,
+      ['--jitless', '--max-semi-space-size=1', '--no-lazy', '--optimize-for-size', '--expose-gc', soakCli, '--seed', '7', '--nights', '3', '--out', outPath],
+      { encoding: 'utf8' }
+    );
+    expect(r.status).toBe(0);
+    const parsed = JSON.parse(readFileSync(outPath, 'utf8'));
+    expect(parsed.nights).toBe(3);
+    expect(parsed.crashes).toBe(0);
+    expect(parsed.results).toHaveLength(3);
+    expect(spawnSync(process.execPath, [soakCli, '--nights', '0'], { encoding: 'utf8' }).status).toBe(2);
+  });
+
+  it('exports sorted local leaderboard via run_cmd --export-leaderboard', () => {
+    const runScript = resolve('scripts/run.mjs');
+    const dataDir = join(temp, 'lb-data');
+    const outEmpty = join(temp, 'lb-empty.json');
+    const rEmpty = spawnSync(process.execPath, [runScript, '--export-leaderboard', outEmpty], {
+      encoding: 'utf8',
+      env: { ...process.env, DAO_DEN_LONG_DATA_DIR: dataDir }
+    });
+    expect(rEmpty.status).toBe(0);
+    expect(JSON.parse(readFileSync(outEmpty, 'utf8'))).toEqual({ entries: [] });
+
+    mkdirSync(dataDir, { recursive: true });
+    writeFileSync(
+      join(dataDir, 'leaderboard.json'),
+      JSON.stringify({
+        entries: [
+          { name: 'Binh', score: 1200, nights_won: 2, achieved_at: '2026-11-20T10:05:00+07:00', seed: 42 },
+          { name: 'Mây_01', score: 1500, nights_won: 3, achieved_at: '2026-11-20T10:10:00+07:00', seed: 42 },
+          { name: 'An_99', score: 1200, nights_won: 2, achieved_at: '2026-11-20T10:01:00+07:00', seed: 7 }
+        ]
+      })
+    );
+    const outSorted = join(temp, 'lb-sorted.json');
+    const rSorted = spawnSync(process.execPath, [runScript, '--export-leaderboard', outSorted], {
+      encoding: 'utf8',
+      env: { ...process.env, DAO_DEN_LONG_DATA_DIR: dataDir }
+    });
+    expect(rSorted.status).toBe(0);
+    const exported = JSON.parse(readFileSync(outSorted, 'utf8'));
+    expect(exported.entries.map((e: { name: string }) => e.name)).toEqual(['Mây_01', 'An_99', 'Binh']);
   });
 });

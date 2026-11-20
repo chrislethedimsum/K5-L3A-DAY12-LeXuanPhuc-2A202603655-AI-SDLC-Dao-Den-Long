@@ -1,30 +1,30 @@
 {
-  "mode": "phase-3-full",
+  "mode": "phase-4-full",
   "results": [
     {
       "name": "tests",
       "status": 0,
-      "elapsed_ms": 3214
+      "elapsed_ms": 3389
     },
     {
       "name": "browser-build",
       "status": 0,
-      "elapsed_ms": 1875
+      "elapsed_ms": 1963
     },
     {
       "name": "smoke",
       "status": 0,
-      "elapsed_ms": 258
+      "elapsed_ms": 246
     },
     {
       "name": "night1-a",
       "status": 0,
-      "elapsed_ms": 61
+      "elapsed_ms": 57
     },
     {
       "name": "night1-b",
       "status": 0,
-      "elapsed_ms": 62
+      "elapsed_ms": 57
     },
     {
       "name": "determinism-night1",
@@ -33,12 +33,12 @@
     {
       "name": "night2-a",
       "status": 0,
-      "elapsed_ms": 60
+      "elapsed_ms": 59
     },
     {
       "name": "night2-b",
       "status": 0,
-      "elapsed_ms": 59
+      "elapsed_ms": 57
     },
     {
       "name": "determinism-night2",
@@ -47,12 +47,12 @@
     {
       "name": "night3-a",
       "status": 0,
-      "elapsed_ms": 64
+      "elapsed_ms": 58
     },
     {
       "name": "night3-b",
       "status": 0,
-      "elapsed_ms": 65
+      "elapsed_ms": 58
     },
     {
       "name": "determinism-night3",
@@ -61,97 +61,97 @@
     {
       "name": "scenario-win",
       "status": 0,
-      "elapsed_ms": 50
+      "elapsed_ms": 44
     },
     {
       "name": "scenario-dawn",
       "status": 0,
-      "elapsed_ms": 47
+      "elapsed_ms": 43
     },
     {
       "name": "scenario-hit",
       "status": 0,
-      "elapsed_ms": 46
+      "elapsed_ms": 43
     },
     {
       "name": "scenario-pulse",
       "status": 0,
-      "elapsed_ms": 47
+      "elapsed_ms": 44
     },
     {
       "name": "scenario-spawn",
       "status": 0,
-      "elapsed_ms": 60
+      "elapsed_ms": 55
     },
     {
       "name": "scenario-pickup",
       "status": 0,
-      "elapsed_ms": 48
+      "elapsed_ms": 44
     },
     {
       "name": "scenario-dash",
       "status": 0,
-      "elapsed_ms": 47
+      "elapsed_ms": 43
     },
     {
       "name": "scenario-fall",
       "status": 0,
-      "elapsed_ms": 47
+      "elapsed_ms": 43
     },
     {
       "name": "scenario-launchpad",
       "status": 0,
-      "elapsed_ms": 56
+      "elapsed_ms": 45
     },
     {
       "name": "scenario-night3-terrain",
       "status": 0,
-      "elapsed_ms": 47
+      "elapsed_ms": 44
     },
     {
       "name": "scenario-drifter",
       "status": 0,
-      "elapsed_ms": 49
+      "elapsed_ms": 43
     },
     {
       "name": "scenario-charm",
       "status": 0,
-      "elapsed_ms": 47
+      "elapsed_ms": 42
     },
     {
       "name": "scenario-pause",
       "status": 0,
-      "elapsed_ms": 48
+      "elapsed_ms": 43
     },
     {
       "name": "scenario-safe-push",
       "status": 0,
-      "elapsed_ms": 47
+      "elapsed_ms": 45
     },
     {
       "name": "scenario-refuel",
       "status": 0,
-      "elapsed_ms": 46
+      "elapsed_ms": 43
     },
     {
       "name": "scenario-lantern-out-relight",
       "status": 0,
-      "elapsed_ms": 46
+      "elapsed_ms": 43
     },
     {
       "name": "scenario-shade-drain",
       "status": 0,
-      "elapsed_ms": 47
+      "elapsed_ms": 43
     },
     {
       "name": "scenario-dawn-survived",
       "status": 0,
-      "elapsed_ms": 45
+      "elapsed_ms": 43
     },
     {
       "name": "scenario-capacity-growth",
       "status": 0,
-      "elapsed_ms": 48
+      "elapsed_ms": 43
     },
     {
       "name": "event-coverage",
@@ -160,7 +160,21 @@
     {
       "name": "perf-headless",
       "status": 0,
-      "elapsed_ms": 187
+      "elapsed_ms": 134
+    },
+    {
+      "name": "soak-test",
+      "status": 0,
+      "elapsed_ms": 421
+    },
+    {
+      "name": "soak-thresholds",
+      "status": 0
+    },
+    {
+      "name": "leaderboard-export",
+      "status": 0,
+      "elapsed_ms": 52
     }
   ]
 }

@@ -1,5 +1,5 @@
 $ npm test
-exit=0 elapsed_ms=3214
+exit=0 elapsed_ms=3389
 
 > dao-den-long@1.0.0 test
 > npm run build:headless && vitest run
@@ -11,16 +11,17 @@ exit=0 elapsed_ms=3214
 
  RUN  v2.1.9 /Users/chris/Desktop/documents/uni/ai thuc chien/lab 12/K5-L3A-DAY12-LeXuanPhuc-2A202603655-AI-SDLC-Dao-Den-Long
 
- ✓ tests/unit/phase3.test.ts (6 tests) 12ms
- ✓ tests/unit/simulation.test.ts (41 tests) 21ms
+ ✓ tests/unit/phase3.test.ts (6 tests) 11ms
+ ✓ tests/unit/simulation.test.ts (41 tests) 20ms
  ✓ tests/unit/phase2.test.ts (8 tests) 6ms
- ✓ tests/contract/headless.test.ts (19 tests) 1969ms
-   ✓ headless contract v1.2 > runs all Phase 2 & Phase 3 feature scenarios via CLI cleanly 657ms
+ ✓ tests/unit/phase4.test.ts (5 tests) 21ms
+ ✓ tests/contract/headless.test.ts (21 tests) 2102ms
+   ✓ headless contract v1.3 > runs all Phase 2 & Phase 3 feature scenarios via CLI cleanly 623ms
  ✓ tests/unit/safe-zones.test.ts (3 tests) 3ms
 
- Test Files  5 passed (5)
-      Tests  77 passed (77)
-   Start at  16:57:10
-   Duration  2.43s (transform 75ms, setup 0ms, collect 150ms, tests 2.01s, environment 0ms, prepare 128ms)
+ Test Files  6 passed (6)
+      Tests  84 passed (84)
+   Start at  17:31:15
+   Duration  2.56s (transform 84ms, setup 0ms, collect 184ms, tests 2.16s, environment 0ms, prepare 156ms)
 
 [33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m

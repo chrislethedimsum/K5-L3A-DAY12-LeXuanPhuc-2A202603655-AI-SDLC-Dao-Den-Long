@@ -19,9 +19,12 @@ const advance = (w: GameWorld, n: number) => {
   for (let i = 0; i < n; i++) w.step();
 };
 
-describe('Phase 1-2 regression adapted for Ticket-03 (Contract v1.2)', () => {
-  it('uses exact Contract v1.2 tuning and isolated snapshots/scenarios', () => {
-    expect(contract.contract_version).toBe('1.2');
+// Ticket-04: Upgraded contract_version metadata to '1.3' with bench_cmd & soak_cmd (gameplay tuning untouched)
+describe('Phase 1-3 regression under Ticket-04 (Contract v1.3)', () => {
+  it('uses exact Contract v1.3 metadata, tuning and isolated snapshots/scenarios', () => {
+    expect(contract.contract_version).toBe('1.3');
+    expect(contract.bench_cmd).toBe('node scripts/bench.mjs');
+    expect(contract.soak_cmd).toContain('soak.js');
     expect(contract.tuning.player_speed).toBe(6);
     expect(contract.tuning.carry_capacity).toBe(10);
     expect(contract.tuning.capacity_max).toBe(20);

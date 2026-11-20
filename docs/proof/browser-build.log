@@ -1,18 +1,18 @@
 $ npm run build
-exit=0 elapsed_ms=1875
+exit=0 elapsed_ms=1963
 
 > dao-den-long@1.0.0 build
 > tsc --noEmit && vite build && npm run build:headless
 
 vite v6.4.6 building for production...
 transforming...
-✓ 16 modules transformed.
+✓ 19 modules transformed.
 rendering chunks...
 computing gzip size...
-dist/index.html                   0.55 kB │ gzip:   0.37 kB
-dist/assets/index-yUDtIC6W.css    4.76 kB │ gzip:   1.68 kB
-dist/assets/index-B2_AVRXd.js   572.29 kB │ gzip: 149.65 kB
-✓ built in 477ms
+dist/index.html                   0.92 kB │ gzip:   0.56 kB
+dist/assets/index-fQDDzuZ8.css    8.26 kB │ gzip:   2.34 kB
+dist/assets/index-DQ_YnhlQ.js   598.38 kB │ gzip: 157.68 kB
+✓ built in 457ms
 
 > dao-den-long@1.0.0 build:headless
 > tsc -p tsconfig.headless.json

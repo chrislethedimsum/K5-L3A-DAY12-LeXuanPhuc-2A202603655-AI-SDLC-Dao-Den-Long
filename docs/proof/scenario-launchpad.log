@@ -1,2 +1,2 @@
 $ /opt/homebrew/Cellar/node/26.13.1_2/bin/node dist-headless/src/headless/cli.js --seed 42 --night 2 --scenario tests/fixtures/launchpad.json --inputs tests/fixtures/launchpad-inputs.json --ticks 120 --out docs/proof/launchpad.jsonl
-exit=0 elapsed_ms=56
+exit=0 elapsed_ms=45
