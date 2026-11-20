@@ -72,8 +72,10 @@ export class GameAudio {
     this.tone(520, 780, 0.14, 'triangle', 0.2);
   }
   playLanternLit(): void {
-    this.tone(523, 784, 0.25, 'triangle', 0.28);
-    setTimeout(() => this.tone(784, 1046, 0.35, 'sine', 0.26), 110);
+    // Vietnamese pentatonic chime (D5 -> G5 -> A5)
+    this.tone(587, 587, 0.16, 'triangle', 0.24);
+    setTimeout(() => this.tone(784, 784, 0.2, 'triangle', 0.24), 90);
+    setTimeout(() => this.tone(880, 1046, 0.34, 'sine', 0.26), 190);
   }
   playLanternOut(): void {
     this.tone(320, 140, 0.3, 'triangle', 0.24);
@@ -103,9 +105,11 @@ export class GameAudio {
     this.tone(260, 390, 0.45, 'sine', 0.14);
   }
   playWin(): void {
-    this.tone(523, 659, 0.2, 'triangle', 0.28);
-    setTimeout(() => this.tone(659, 784, 0.2, 'triangle', 0.28), 140);
-    setTimeout(() => this.tone(784, 1046, 0.45, 'sine', 0.3), 280);
+    // Dawn pentatonic arpeggio (D5 -> F5 -> G5 -> A5 -> C6)
+    this.tone(587, 587, 0.16, 'triangle', 0.24);
+    setTimeout(() => this.tone(698, 698, 0.16, 'triangle', 0.24), 110);
+    setTimeout(() => this.tone(784, 784, 0.18, 'triangle', 0.26), 220);
+    setTimeout(() => this.tone(880, 1046, 0.42, 'sine', 0.3), 340);
   }
   playLose(): void {
     this.tone(311, 220, 0.28, 'sine', 0.25);

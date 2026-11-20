@@ -1,7 +1,8 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
 process.chdir(root);
@@ -103,6 +104,61 @@ const bench = run('perf-headless', process.execPath, [cli, '--seed', '42', '--ni
 const benchEntry = results.at(-1);
 writeFileSync(resolve(dir, 'perf-headless.log'), `ticks=18000\nnight=3\nelapsed_ms=${benchEntry.elapsed_ms}\nthreshold_ms=30000\npassed=${bench.status === 0 && benchEntry.elapsed_ms <= 30000}\n`);
 
-writeFileSync(resolve(dir, 'run-summary.json'), JSON.stringify({ mode: 'phase-3-full', results }, null, 2) + '\n');
+// 10-night soak test check (Phase 4)
+const soakCli = 'dist-headless/src/headless/soak.js';
+const soakRun = run('soak-test', process.execPath, [
+  '--jitless',
+  '--max-semi-space-size=1',
+  '--no-lazy',
+  '--optimize-for-size',
+  '--expose-gc',
+  soakCli,
+  '--seed',
+  '7',
+  '--nights',
+  '10',
+  '--out',
+  'docs/proof/soak-proof.json'
+]);
+let soakOk = false;
+if (soakRun.status === 0) {
+  try {
+    const s = JSON.parse(readFileSync(resolve(dir, 'soak-proof.json'), 'utf8'));
+    soakOk = s.crashes === 0 && s.nights === 10 && s.mem_end_mb <= 1.2 * s.mem_start_mb;
+  } catch {
+    soakOk = false;
+  }
+}
+results.push({ name: 'soak-thresholds', status: soakOk ? 0 : 1 });
+
+// Leaderboard export check (Phase 4)
+const lbTmpDir = mkdtempSync(join(tmpdir(), 'ddl-proof-lb-'));
+try {
+  writeFileSync(
+    join(lbTmpDir, 'leaderboard.json'),
+    JSON.stringify({
+      entries: [
+        { name: 'Thảo_2', score: 900, nights_won: 1, achieved_at: '2026-11-20T10:05:00+07:00', seed: 42 },
+        { name: 'Minh_1', score: 1850, nights_won: 3, achieved_at: '2026-11-20T10:02:00+07:00', seed: 42 }
+      ]
+    })
+  );
+  const startLb = Date.now();
+  const lbRes = spawnSync(process.execPath, ['scripts/run.mjs', '--export-leaderboard', 'docs/proof/leaderboard-export.json'], {
+    encoding: 'utf8',
+    cwd: root,
+    env: { ...process.env, DAO_DEN_LONG_DATA_DIR: lbTmpDir }
+  });
+  let lbOk = lbRes.status === 0;
+  if (lbOk) {
+    const exp = JSON.parse(readFileSync(resolve(dir, 'leaderboard-export.json'), 'utf8'));
+    lbOk = Array.isArray(exp.entries) && exp.entries.length === 2 && exp.entries[0].name === 'Minh_1';
+  }
+  results.push({ name: 'leaderboard-export', status: lbOk ? 0 : 1, elapsed_ms: Date.now() - startLb });
+} finally {
+  rmSync(lbTmpDir, { recursive: true, force: true });
+}
+
+writeFileSync(resolve(dir, 'run-summary.json'), JSON.stringify({ mode: 'phase-4-full', results }, null, 2) + '\n');
 if (results.some((r) => r.status !== 0)) process.exitCode = 1;
 console.log(JSON.stringify(results, null, 2));

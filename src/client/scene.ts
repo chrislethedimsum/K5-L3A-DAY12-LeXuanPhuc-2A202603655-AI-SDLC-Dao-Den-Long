@@ -8,6 +8,8 @@ const T = contract.tuning;
 const PALETTE = {
   sky: '#0E1430',
   fog: '#1B2350',
+  dawnSky: '#3A284E',
+  dawnMoon: '#FFE2AE',
   grass: '#2F5D50',
   sand: '#C9B48A',
   wood: '#6B4A2F',
@@ -28,6 +30,10 @@ const PALETTE = {
   drifter: '#8FA3B8'
 };
 
+const MAX_MOTES = 128;
+const MAX_SHADES = 256;
+const EMBER_COUNT = 40;
+
 export interface ProjectedPoint {
   x: number;
   y: number;
@@ -44,11 +50,36 @@ export class IslandScene {
   private entities = new Map<string, THREE.Group>();
   private rings: { mesh: THREE.Mesh; age: number }[] = [];
   private leaves: THREE.Mesh[] = [];
+
+  private moteCoreMesh: THREE.InstancedMesh;
+  private moteHaloMesh: THREE.InstancedMesh;
+  private shadeBodyMesh: THREE.InstancedMesh;
+  private shadeRimMesh: THREE.InstancedMesh;
+  private shadeEyeLMesh: THREE.InstancedMesh;
+  private shadeEyeRMesh: THREE.InstancedMesh;
+  private shadeRimMat: THREE.MeshBasicMaterial;
+  private shadeEyeMat: THREE.MeshStandardMaterial;
+  private dummy = new THREE.Object3D();
+  private colorNormalShade = new THREE.Color(PALETTE.shadeBody);
+  private colorStunnedShade = new THREE.Color(PALETTE.shadeStunned);
+
+  private embersPos = new Float32Array(EMBER_COUNT * 3);
+  private embersGeo = new THREE.BufferGeometry();
+  private embersPoints: THREE.Points;
+
   private sky = new THREE.Color(PALETTE.sky);
+  private fogBase = new THREE.Color(PALETTE.fog);
+  private dawnColor = new THREE.Color(PALETTE.dawnSky);
+  private moonColorBase = new THREE.Color(0xf5f1e6);
+  private moonColorDawn = new THREE.Color(PALETTE.dawnMoon);
   private ambient = new THREE.HemisphereLight(0xf5f1e6, 0x1b2350, 0.15);
   private moon = new THREE.DirectionalLight(0xf5f1e6, 1.35);
   private builtNight: NightNumber | null = null;
   private colorblind = false;
+  private reducedMotion = false;
+  private benchMode = false;
+  private shakeTime = 0;
+  private shakeAmp = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -96,6 +127,72 @@ export class IslandScene {
 
     this.scene.add(this.terrainGroup);
 
+    // Instanced Motes (2 draw calls total regardless of mote count)
+    this.moteCoreMesh = new THREE.InstancedMesh(
+      new THREE.SphereGeometry(0.2, 8, 6),
+      new THREE.MeshStandardMaterial({
+        color: PALETTE.moteCore,
+        roughness: 0.85,
+        emissive: PALETTE.moteCore,
+        emissiveIntensity: 1.1
+      }),
+      MAX_MOTES
+    );
+    this.moteHaloMesh = new THREE.InstancedMesh(
+      new THREE.SphereGeometry(0.42, 8, 6),
+      new THREE.MeshBasicMaterial({ color: PALETTE.moteHalo, transparent: true, opacity: 0.2 }),
+      MAX_MOTES
+    );
+    this.moteCoreMesh.count = 0;
+    this.moteHaloMesh.count = 0;
+    this.moteCoreMesh.frustumCulled = false;
+    this.moteHaloMesh.frustumCulled = false;
+    this.scene.add(this.moteCoreMesh, this.moteHaloMesh);
+
+    // Instanced Shades (4 draw calls total even for 200+ Shades in benchmark)
+    const shadeBodyGeo = new THREE.SphereGeometry(0.75, 12, 8);
+    shadeBodyGeo.scale(1, 1.3, 1);
+    const shadeBodyMat = new THREE.MeshStandardMaterial({ color: '#FFFFFF', roughness: 0.85 });
+    this.shadeBodyMesh = new THREE.InstancedMesh(shadeBodyGeo, shadeBodyMat, MAX_SHADES);
+    for (let i = 0; i < MAX_SHADES; i++) {
+      this.shadeBodyMesh.setColorAt(i, this.colorNormalShade);
+    }
+
+    const shadeRimGeo = new THREE.TorusGeometry(0.76, 0.06, 6, 18);
+    shadeRimGeo.rotateX(Math.PI / 2);
+    this.shadeRimMat = new THREE.MeshBasicMaterial({ color: PALETTE.shadeRim });
+    this.shadeRimMesh = new THREE.InstancedMesh(shadeRimGeo, this.shadeRimMat, MAX_SHADES);
+
+    this.shadeEyeMat = new THREE.MeshStandardMaterial({
+      color: PALETTE.shadeRim,
+      roughness: 0.5,
+      emissive: PALETTE.shadeRim,
+      emissiveIntensity: 1.1
+    });
+    const eyeLGeo = new THREE.SphereGeometry(0.1, 6, 6);
+    eyeLGeo.translate(-0.22, 0.32, 0.65);
+    const eyeRGeo = new THREE.SphereGeometry(0.1, 6, 6);
+    eyeRGeo.translate(0.22, 0.32, 0.65);
+    this.shadeEyeLMesh = new THREE.InstancedMesh(eyeLGeo, this.shadeEyeMat, MAX_SHADES);
+    this.shadeEyeRMesh = new THREE.InstancedMesh(eyeRGeo, this.shadeEyeMat, MAX_SHADES);
+
+    for (const im of [this.shadeBodyMesh, this.shadeRimMesh, this.shadeEyeLMesh, this.shadeEyeRMesh]) {
+      im.count = 0;
+      im.frustumCulled = false;
+      this.scene.add(im);
+    }
+
+    // Client-only creativity: rising lantern embers (1 draw call; disabled in bench & reduced-motion)
+    this.embersGeo.setAttribute('position', new THREE.BufferAttribute(this.embersPos, 3));
+    this.embersPoints = new THREE.Points(
+      this.embersGeo,
+      new THREE.PointsMaterial({ color: PALETTE.gold, size: 0.24, transparent: true, opacity: 0.75 })
+    );
+    this.embersPoints.frustumCulled = false;
+    this.embersPoints.visible = false;
+    this.scene.add(this.embersPoints);
+
+    // Mây
     this.mesh(new THREE.CylinderGeometry(0.36, 0.54, 1.05, 10), PALETTE.mayRobe, this.player, 0, 0.85, 0);
     this.mesh(new THREE.TorusGeometry(0.34, 0.08, 6, 16), PALETTE.mayScarfAndCharm, this.player, 0, 1.32, 0).rotation.x =
       Math.PI / 2;
@@ -125,20 +222,41 @@ export class IslandScene {
   setColorblind(enabled: boolean): void {
     this.colorblind = enabled;
     const accent = enabled ? PALETTE.shadeRimColorblind : PALETTE.shadeRim;
-    for (const [key, g] of this.entities) {
-      if (key.startsWith('shade:')) {
-        const rim = g.getObjectByName('rim') as THREE.Mesh | undefined;
-        if (rim) (rim.material as THREE.MeshBasicMaterial).color.set(accent);
-        for (const eyeName of ['eyeL', 'eyeR']) {
-          const eye = g.getObjectByName(eyeName) as THREE.Mesh | undefined;
-          if (eye) {
-            const mat = eye.material as THREE.MeshStandardMaterial;
-            mat.color.set(accent);
-            mat.emissive.set(accent);
-          }
-        }
+    this.shadeRimMat.color.set(accent);
+    this.shadeEyeMat.color.set(accent);
+    this.shadeEyeMat.emissive.set(accent);
+  }
+
+  setBenchMode(enabled: boolean): void {
+    this.benchMode = enabled;
+    if (enabled) {
+      this.shakeTime = 0;
+      this.shakeAmp = 0;
+      this.embersPoints.visible = false;
+    }
+  }
+
+  setReducedMotion(enabled: boolean): void {
+    this.reducedMotion = enabled;
+    if (enabled) {
+      this.shakeTime = 0;
+      this.shakeAmp = 0;
+      this.embersPoints.visible = false;
+    }
+  }
+
+  getRendererInfo(): string {
+    const gl = this.renderer.getContext();
+    let gpu = String(gl.getParameter(gl.RENDERER) || 'WebGL');
+    const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+    if (dbg) {
+      const unmasked = gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL);
+      if (typeof unmasked === 'string' && unmasked.trim()) {
+        gpu = unmasked.trim();
       }
     }
+    const ver = gl instanceof WebGL2RenderingContext ? 'WebGL2' : 'WebGL1';
+    return `Three.js r${THREE.REVISION} / ${ver} (${gpu})`;
   }
 
   private mesh(
@@ -199,7 +317,14 @@ export class IslandScene {
     }
 
     const addIslandDisk = (cx: number, cz: number, radius: number, topY: number, height: number) => {
-      this.mesh(new THREE.CylinderGeometry(radius, radius * 0.92, height, 48), PALETTE.grass, this.terrainGroup, cx, topY - height / 2, cz);
+      this.mesh(
+        new THREE.CylinderGeometry(radius, radius * 0.92, height, 48),
+        PALETTE.grass,
+        this.terrainGroup,
+        cx,
+        topY - height / 2,
+        cz
+      );
       const shore = new THREE.Mesh(
         new THREE.TorusGeometry(radius, 0.25, 6, 64),
         new THREE.MeshStandardMaterial({ color: PALETTE.sand, roughness: 0.9 })
@@ -210,8 +335,23 @@ export class IslandScene {
     };
 
     const addLaunchPad = (pos: Pos3) => {
-      this.mesh(new THREE.CylinderGeometry(1.0, 1.1, 0.22, 20), PALETTE.wood, this.terrainGroup, pos[0], pos[1] + 0.11, pos[2]);
-      this.mesh(new THREE.CylinderGeometry(0.72, 0.72, 0.25, 20), PALETTE.gold, this.terrainGroup, pos[0], pos[1] + 0.14, pos[2], true);
+      this.mesh(
+        new THREE.CylinderGeometry(1.0, 1.1, 0.22, 20),
+        PALETTE.wood,
+        this.terrainGroup,
+        pos[0],
+        pos[1] + 0.11,
+        pos[2]
+      );
+      this.mesh(
+        new THREE.CylinderGeometry(0.72, 0.72, 0.25, 20),
+        PALETTE.gold,
+        this.terrainGroup,
+        pos[0],
+        pos[1] + 0.14,
+        pos[2],
+        true
+      );
     };
 
     if (night === 1) {
@@ -266,6 +406,15 @@ export class IslandScene {
     this.entities.clear();
     for (const r of this.rings) this.dispose(r.mesh);
     this.rings = [];
+    this.moteCoreMesh.count = 0;
+    this.moteHaloMesh.count = 0;
+    this.shadeBodyMesh.count = 0;
+    this.shadeRimMesh.count = 0;
+    this.shadeEyeLMesh.count = 0;
+    this.shadeEyeRMesh.count = 0;
+    this.embersPoints.visible = false;
+    this.shakeTime = 0;
+    this.shakeAmp = 0;
   }
 
   projectToScreen(pos: Pos3): ProjectedPoint {
@@ -275,7 +424,15 @@ export class IslandScene {
     return { x: v.x, y: v.y, inFront, onScreen };
   }
 
-  draw(s: Snapshot, hud: HudState, yaw: number, elapsed: number, delta: number, events: GameEvent[]): void {
+  draw(
+    s: Snapshot,
+    hud: HudState,
+    yaw: number,
+    elapsed: number,
+    delta: number,
+    events: GameEvent[],
+    benchCameraElapsedS?: number
+  ): void {
     this.buildTerrain(s.night);
     const p = s.player.pos;
     this.player.position.set(p[0], p[1], p[2]);
@@ -359,7 +516,6 @@ export class IslandScene {
       const lowFuel = l.lit && l.fuel < T.low_fuel_threshold;
       const pulseOn = !lowFuel || blink1Hz;
 
-      // Color-independent unlit shape: squashed 20% + visible paper tears
       orb.scale.set(1, l.lit ? 1 : 0.8, 1);
       tears.visible = !l.lit;
 
@@ -380,51 +536,56 @@ export class IslandScene {
       (g.getObjectByName('light') as THREE.PointLight).intensity = l.lit ? (pulseOn ? 14 : 4) : 0;
     }
 
-    for (const m of s.motes) {
-      const key = 'mote:' + m.id;
-      active.add(key);
-      const g = this.entity(key, () => {
-        const group = new THREE.Group();
-        this.mesh(new THREE.SphereGeometry(0.2, 8, 6), PALETTE.moteCore, group, 0, 0, 0, true);
-        const halo = new THREE.Mesh(
-          new THREE.SphereGeometry(0.42, 8, 6),
-          new THREE.MeshBasicMaterial({ color: PALETTE.moteHalo, transparent: true, opacity: 0.2 })
-        );
-        group.add(halo);
-        return group;
-      });
-      g.position.set(m.pos[0], m.pos[1] + 0.9 + Math.sin(elapsed * 2.4 + m.pos[0]) * 0.2, m.pos[2]);
+    // Update InstancedMesh Motes
+    const moteCount = Math.min(s.motes.length, MAX_MOTES);
+    this.moteCoreMesh.count = moteCount;
+    this.moteHaloMesh.count = moteCount;
+    this.dummy.rotation.set(0, 0, 0);
+    this.dummy.scale.set(1, 1, 1);
+    for (let i = 0; i < moteCount; i++) {
+      const m = s.motes[i];
+      this.dummy.position.set(m.pos[0], m.pos[1] + 0.9 + Math.sin(elapsed * 2.4 + m.pos[0]) * 0.2, m.pos[2]);
+      this.dummy.updateMatrix();
+      this.moteCoreMesh.setMatrixAt(i, this.dummy.matrix);
+      this.moteHaloMesh.setMatrixAt(i, this.dummy.matrix);
     }
+    this.moteCoreMesh.instanceMatrix.needsUpdate = true;
+    this.moteHaloMesh.instanceMatrix.needsUpdate = true;
 
-    const shadeAccent = this.colorblind ? PALETTE.shadeRimColorblind : PALETTE.shadeRim;
-    for (const sh of s.shades) {
-      const key = 'shade:' + sh.id;
-      active.add(key);
-      const g = this.entity(key, () => {
-        const group = new THREE.Group();
-        const body = this.mesh(new THREE.SphereGeometry(0.75, 12, 8), PALETTE.shadeBody, group, 0, 0, 0);
-        body.name = 'body';
-        body.scale.y = 1.3;
-        const rim = new THREE.Mesh(
-          new THREE.TorusGeometry(0.76, 0.06, 6, 18),
-          new THREE.MeshBasicMaterial({ color: shadeAccent })
-        );
-        rim.rotation.x = Math.PI / 2;
-        rim.name = 'rim';
-        group.add(rim);
-        const eyeL = this.mesh(new THREE.SphereGeometry(0.1, 6, 6), shadeAccent, group, -0.22, 0.32, 0.65, true);
-        eyeL.name = 'eyeL';
-        const eyeR = this.mesh(new THREE.SphereGeometry(0.1, 6, 6), shadeAccent, group, 0.22, 0.32, 0.65, true);
-        eyeR.name = 'eyeR';
-        return group;
-      });
-      g.position.set(sh.pos[0], sh.pos[1] + Math.sin(elapsed * 2.2) * 0.1, sh.pos[2]);
-      g.lookAt(p[0], sh.pos[1], p[2]);
-      const bodyMat = (g.getObjectByName('body') as THREE.Mesh).material as THREE.MeshStandardMaterial;
-      bodyMat.color.set(sh.state === 'stunned' ? PALETTE.shadeStunned : PALETTE.shadeBody);
-      g.rotation.z = sh.state === 'stunned' ? 0.25 * Math.sin(elapsed * 20) : 0;
-      const drainScale = sh.state === 'drain' ? 1 + 0.15 * Math.sin(elapsed * 10) : 1;
-      g.scale.setScalar(sh.state === 'spawning' ? 0.6 + 0.4 * Math.sin(elapsed * 12) : drainScale);
+    // Update InstancedMesh Shades
+    const shadeCount = Math.min(s.shades.length, MAX_SHADES);
+    this.shadeBodyMesh.count = shadeCount;
+    this.shadeRimMesh.count = shadeCount;
+    this.shadeEyeLMesh.count = shadeCount;
+    this.shadeEyeRMesh.count = shadeCount;
+    for (let i = 0; i < shadeCount; i++) {
+      const sh = s.shades[i];
+      const bobY = sh.pos[1] + Math.sin(elapsed * 2.2) * 0.1;
+      this.dummy.position.set(sh.pos[0], bobY, sh.pos[2]);
+      this.dummy.lookAt(p[0], bobY, p[2]);
+      if (sh.state === 'stunned') {
+        this.dummy.rotateZ(0.25 * Math.sin(elapsed * 20));
+      }
+      const scale =
+        sh.state === 'spawning'
+          ? 0.6 + 0.4 * Math.sin(elapsed * 12)
+          : sh.state === 'drain'
+            ? 1 + 0.15 * Math.sin(elapsed * 10)
+            : 1;
+      this.dummy.scale.setScalar(scale);
+      this.dummy.updateMatrix();
+      this.shadeBodyMesh.setMatrixAt(i, this.dummy.matrix);
+      this.shadeRimMesh.setMatrixAt(i, this.dummy.matrix);
+      this.shadeEyeLMesh.setMatrixAt(i, this.dummy.matrix);
+      this.shadeEyeRMesh.setMatrixAt(i, this.dummy.matrix);
+      this.shadeBodyMesh.setColorAt(i, sh.state === 'stunned' ? this.colorStunnedShade : this.colorNormalShade);
+    }
+    this.shadeBodyMesh.instanceMatrix.needsUpdate = true;
+    this.shadeRimMesh.instanceMatrix.needsUpdate = true;
+    this.shadeEyeLMesh.instanceMatrix.needsUpdate = true;
+    this.shadeEyeRMesh.instanceMatrix.needsUpdate = true;
+    if (this.shadeBodyMesh.instanceColor) {
+      this.shadeBodyMesh.instanceColor.needsUpdate = true;
     }
 
     for (const d of s.drifters) {
@@ -474,6 +635,13 @@ export class IslandScene {
         mesh.position.set(p[0], p[1] + 0.2, p[2]);
         this.scene.add(mesh);
         this.rings.push({ mesh, age: 0 });
+        if (!this.benchMode && !this.reducedMotion) {
+          this.shakeTime = Math.max(this.shakeTime, 0.16);
+          this.shakeAmp = Math.max(this.shakeAmp, 0.18);
+        }
+      } else if (e.name === 'player_hit' && !this.benchMode && !this.reducedMotion) {
+        this.shakeTime = 0.32;
+        this.shakeAmp = 0.45;
       }
     }
 
@@ -504,13 +672,59 @@ export class IslandScene {
       }
     });
 
-    const litRatio = s.lanterns.filter((l) => l.lit).length / s.lanterns.length;
+    const litLanterns = s.lanterns.filter((l) => l.lit);
+    const litRatio = litLanterns.length / s.lanterns.length;
     this.ambient.intensity = 0.15 + 0.55 * litRatio;
-    this.sky.set(PALETTE.sky).lerp(new THREE.Color(PALETTE.fog), litRatio * 0.55);
+    this.sky.set(PALETTE.sky).lerp(this.fogBase, litRatio * 0.55);
+
+    // Client-only creativity: dawn sky warmth & lantern embers (strictly disabled in benchMode & reducedMotion)
+    if (!this.benchMode && !this.reducedMotion) {
+      const dawnBlend = s.state === 'won' ? 0.65 : s.time_left_s <= 30 ? Math.max(0, (30 - s.time_left_s) / 30) * 0.45 : 0;
+      if (dawnBlend > 0) {
+        this.sky.lerp(this.dawnColor, dawnBlend);
+        this.moon.color.copy(this.moonColorBase).lerp(this.moonColorDawn, dawnBlend);
+      } else {
+        this.moon.color.copy(this.moonColorBase);
+      }
+
+      if (litLanterns.length > 0) {
+        this.embersPoints.visible = true;
+        for (let i = 0; i < EMBER_COUNT; i++) {
+          const anchor = litLanterns[i % litLanterns.length];
+          const phase = (elapsed * 0.7 + i * 0.37) % 3.2;
+          const angle = i * 1.9 + elapsed * 0.9;
+          const rad = 0.4 + (i % 5) * 0.22;
+          this.embersPos[i * 3] = anchor.pos[0] + Math.cos(angle) * rad;
+          this.embersPos[i * 3 + 1] = anchor.pos[1] + 1.2 + phase * 1.6;
+          this.embersPos[i * 3 + 2] = anchor.pos[2] + Math.sin(angle) * rad;
+        }
+        (this.embersGeo.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
+      } else {
+        this.embersPoints.visible = false;
+      }
+    } else {
+      this.moon.color.copy(this.moonColorBase);
+      this.embersPoints.visible = false;
+    }
+
     (this.scene.fog as THREE.FogExp2).color.copy(this.sky);
 
-    this.camera.position.set(p[0] + Math.sin(yaw) * 22, p[1] + 24, p[2] + Math.cos(yaw) * 22);
-    this.camera.lookAt(p[0], p[1] + 0.8, p[2]);
+    if (benchCameraElapsedS !== undefined) {
+      const theta = (2 * Math.PI * benchCameraElapsedS) / 15;
+      this.camera.position.set(30 * Math.cos(theta), 15, -30 * Math.sin(theta));
+      this.camera.lookAt(0, 0, 0);
+    } else {
+      let sx = 0;
+      let sy = 0;
+      if (!this.benchMode && !this.reducedMotion && this.shakeTime > 0) {
+        this.shakeTime = Math.max(0, this.shakeTime - delta);
+        const mag = this.shakeAmp * (this.shakeTime / 0.32);
+        sx = Math.sin(elapsed * 57) * mag;
+        sy = Math.cos(elapsed * 73) * mag * 0.6;
+      }
+      this.camera.position.set(p[0] + Math.sin(yaw) * 22 + sx, p[1] + 24 + sy, p[2] + Math.cos(yaw) * 22);
+      this.camera.lookAt(p[0], p[1] + 0.8, p[2]);
+    }
     this.renderer.render(this.scene, this.camera);
   }
 }
