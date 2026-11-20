@@ -1,4 +1,4 @@
-name: Phase 1 verification
+name: CI Verification (Contract v1.3)
 on: [push, pull_request]
 permissions:
   contents: read
@@ -14,8 +14,9 @@ jobs:
       - run: npm ci
       - run: npm run verify
       - run: node scripts/collect-proof.mjs
+      - run: npm run soak
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: phase-1-proof
+          name: contract-v13-proof
           path: docs/proof/
